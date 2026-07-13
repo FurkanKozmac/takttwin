@@ -1,0 +1,10 @@
+package com.furkankozmac.takttwin.core.application.port;
+
+import com.furkankozmac.takttwin.core.domain.model.TelemetryLog;
+
+import java.util.List;
+
+public interface TelemetryLogPort {
+    TelemetryLog save(TelemetryLog telemetryLog);
+    List<TelemetryLog> findByCycleNumber(Long cycleNumber);
+}
