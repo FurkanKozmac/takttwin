@@ -1,8 +1,10 @@
 package com.furkankozmac.takttwin.infrastructure.persistence.mapper;
 
+import com.furkankozmac.takttwin.core.domain.model.AndonAlert;
 import com.furkankozmac.takttwin.core.domain.model.Station;
 import com.furkankozmac.takttwin.core.domain.model.TelemetryLog;
 import com.furkankozmac.takttwin.core.domain.model.WorkElement;
+import com.furkankozmac.takttwin.infrastructure.persistence.entity.AndonAlertEntity;
 import com.furkankozmac.takttwin.infrastructure.persistence.entity.StationEntity;
 import com.furkankozmac.takttwin.infrastructure.persistence.entity.TelemetryLogEntity;
 import com.furkankozmac.takttwin.infrastructure.persistence.entity.WorkElementEntity;
@@ -93,6 +95,34 @@ public class PersistenceMapper {
                 .workElementId(domain.getWorkElementId())
                 .actualDuration(domain.getActualDuration())
                 .cycleNumber(domain.getCycleNumber())
+                .createdAt(domain.getCreatedAt())
+                .build();
+    }
+
+    public static AndonAlert toDomain(AndonAlertEntity entity) {
+        if (entity == null) return null;
+        return AndonAlert.builder()
+                .id(entity.getId())
+                .stationId(entity.getStationId())
+                .cycleNumber(entity.getCycleNumber())
+                .totalCycleTime(entity.getTotalCycleTime())
+                .taktTime(entity.getTaktTime())
+                .message(entity.getMessage())
+                .resolved(entity.isResolved())
+                .createdAt(entity.getCreatedAt())
+                .build();
+    }
+
+    public static AndonAlertEntity toEntity(AndonAlert domain) {
+        if (domain == null) return null;
+        return AndonAlertEntity.builder()
+                .id(domain.getId())
+                .stationId(domain.getStationId())
+                .cycleNumber(domain.getCycleNumber())
+                .totalCycleTime(domain.getTotalCycleTime())
+                .taktTime(domain.getTaktTime())
+                .message(domain.getMessage())
+                .resolved(domain.isResolved())
                 .createdAt(domain.getCreatedAt())
                 .build();
     }
