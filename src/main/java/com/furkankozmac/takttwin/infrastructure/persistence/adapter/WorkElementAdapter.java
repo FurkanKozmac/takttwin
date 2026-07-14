@@ -25,6 +25,8 @@ public class WorkElementAdapter implements WorkElementPort {
 
     @Override
     public WorkElement save(WorkElement workElement) {
+        System.out.println("[DEBUG - ADAPTER] Adapter'a Gelen Station ID: " + workElement.getStationId());
+
         StationEntity stationEntity = stationRepository.findById(workElement.getStationId())
                 .orElseThrow(() -> new IllegalArgumentException("İstasyon bulunamadı ID: " + workElement.getStationId()));
 

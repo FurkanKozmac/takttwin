@@ -34,7 +34,7 @@ public class StationService {
     }
 
     public WorkElement addWorkElement(WorkElement workElement) {
-        getStationById(workElement.getId());
+        getStationById(workElement.getStationId());
         return workElementPort.save(workElement);
     }
 }

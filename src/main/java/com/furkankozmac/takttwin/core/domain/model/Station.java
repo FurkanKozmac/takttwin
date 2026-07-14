@@ -13,7 +13,7 @@ import java.util.List;
 @AllArgsConstructor
 @Builder
 public class Station {
-    private long id;
+    private Long id;
     private String name;
     private Double taktTime;
 

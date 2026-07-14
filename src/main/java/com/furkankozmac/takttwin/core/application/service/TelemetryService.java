@@ -30,10 +30,10 @@ public class TelemetryService {
         this.andonAlertPort = andonAlertPort;
     }
 
-    public TelemetryLog setTelemetry(TelemetryLog log) {
+    public TelemetryLog submitTelemetry(TelemetryLog log) {
         Station station = stationPort.findById(log.getStationId()).orElseThrow(() -> new EntityNotFoundException("Station with id " + log.getStationId() + " not found"));
 
-        List<WorkElement> definedElements = workElementPort.findByStationId(log.getId());
+        List<WorkElement> definedElements = workElementPort.findByStationId(log.getStationId());
         boolean elementExists = definedElements.stream().anyMatch(e -> e.getId().equals(log.getWorkElementId()));
 
         if (!elementExists) {
