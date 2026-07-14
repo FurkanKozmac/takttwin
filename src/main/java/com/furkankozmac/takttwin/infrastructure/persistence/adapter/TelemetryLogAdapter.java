@@ -32,4 +32,10 @@ public class TelemetryLogAdapter implements TelemetryLogPort {
                 .map(PersistenceMapper::toDomain)
                 .collect(Collectors.toList());
     }
+
+    @Override
+    public Double getAverageDurationByElementId(Long elementId) {
+        Double avg = repository.getAverageDurationByElementId(elementId);
+        return avg != null ? avg : 0.0 ;
+    }
 }

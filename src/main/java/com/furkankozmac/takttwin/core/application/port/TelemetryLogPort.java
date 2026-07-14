@@ -7,4 +7,5 @@ import java.util.List;
 public interface TelemetryLogPort {
     TelemetryLog save(TelemetryLog telemetryLog);
     List<TelemetryLog> findByCycleNumber(Long cycleNumber);
+    Double getAverageDurationByElementId(Long elementId);
 }

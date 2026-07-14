@@ -75,16 +75,7 @@ public class TelemetryService {
 
             System.err.println("[!!!] " + alertMessage);
 
-            AndonAlert alert = AndonAlert.builder()
-                    .stationId(stationId)
-                    .cycleNumber(cycleNumber)
-                    .totalCycleTime(totalActualDuration)
-                    .taktTime(taktTime)
-                    .message(alertMessage)
-                    .resolved(false)
-                    .createdAt(LocalDateTime.now())
-                    .build();
-
+            AndonAlert alert = AndonAlert.create(stationId, cycleNumber, totalActualDuration, taktTime, alertMessage);
             andonAlertPort.save(alert);
         }
     }

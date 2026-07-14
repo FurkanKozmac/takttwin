@@ -6,6 +6,7 @@ import com.furkankozmac.takttwin.core.application.port.TelemetryLogPort;
 import com.furkankozmac.takttwin.core.application.port.WorkElementPort;
 import com.furkankozmac.takttwin.core.application.service.StationService;
 import com.furkankozmac.takttwin.core.application.service.TelemetryService;
+import com.furkankozmac.takttwin.core.application.service.YamazumiService;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 
@@ -20,5 +21,12 @@ public class ApplicationConfig {
     @Bean
     public TelemetryService telemetryService(TelemetryLogPort telemetryLogPort, StationPort stationPort, WorkElementPort workElementPort, AndonAlertPort andonAlertPort) {
         return new TelemetryService(telemetryLogPort, stationPort, workElementPort, andonAlertPort);
+    }
+
+    @Bean
+    public YamazumiService yamazumiService(StationPort stationPort,
+                                           WorkElementPort workElementPort,
+                                           TelemetryLogPort telemetryLogPort) {
+        return new YamazumiService(stationPort, workElementPort, telemetryLogPort);
     }
 }
