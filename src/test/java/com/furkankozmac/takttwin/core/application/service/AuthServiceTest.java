@@ -3,7 +3,6 @@ package com.furkankozmac.takttwin.core.application.service;
 import com.furkankozmac.takttwin.core.application.port.PasswordPort;
 import com.furkankozmac.takttwin.core.application.port.RefreshTokenPort;
 import com.furkankozmac.takttwin.core.application.port.UserPort;
-import com.furkankozmac.takttwin.core.domain.exception.EntityNotFoundException;
 import com.furkankozmac.takttwin.core.domain.model.RefreshToken;
 import com.furkankozmac.takttwin.core.domain.model.Role;
 import com.furkankozmac.takttwin.core.domain.model.User;

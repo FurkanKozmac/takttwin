@@ -22,7 +22,7 @@ public class AndonAlertController {
     }
 
     @GetMapping
-    @PreAuthorize("hasAnyRole('TEAM_LEADER', 'HSE_SPECIALIST')")
+    @PreAuthorize("hasAnyRole('ADMIN','TEAM_LEADER', 'HSE_SPECIALIST')")
     public ResponseEntity<List<AndonAlert>> getActiveAlerts() {
         return ResponseEntity.ok(andonAlertService.getActiveAlerts());
     }

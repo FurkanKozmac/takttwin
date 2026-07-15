@@ -1,0 +1,44 @@
+package com.furkankozmac.takttwin.infrastructure.persistence.adapter;
+
+import com.furkankozmac.takttwin.core.application.port.TelemetryLogPort;
+import com.furkankozmac.takttwin.core.domain.model.TelemetryLog;
+import com.furkankozmac.takttwin.infrastructure.persistence.entity.TelemetryLogEntity;
+import com.furkankozmac.takttwin.infrastructure.persistence.mapper.PersistenceMapper;
+import com.furkankozmac.takttwin.infrastructure.persistence.repository.TelemetryLogJpaRepository;
+import org.springframework.context.annotation.Primary;
+import org.springframework.stereotype.Component;
+
+import java.util.List;
+import java.util.stream.Collectors;
+
+@Component
+@Primary
+public class FlushingTelemetryLogAdapter implements TelemetryLogPort {
+
+    private final TelemetryLogJpaRepository repository;
+
+    public FlushingTelemetryLogAdapter(TelemetryLogJpaRepository repository) {
+        this.repository = repository;
+    }
+
+    @Override
+    public TelemetryLog save(TelemetryLog telemetryLog) {
+        TelemetryLogEntity entity = PersistenceMapper.toEntity(telemetryLog);
+        // Use saveAndFlush to force immediate insert so concurrent cycle counting queries can read it
+        TelemetryLogEntity savedEntity = repository.saveAndFlush(entity);
+        return PersistenceMapper.toDomain(savedEntity);
+    }
+
+    @Override
+    public List<TelemetryLog> findByCycleNumber(Long cycleNumber) {
+        return repository.findByCycleNumber(cycleNumber).stream()
+                .map(PersistenceMapper::toDomain)
+                .collect(Collectors.toList());
+    }
+
+    @Override
+    public Double getAverageDurationByElementId(Long elementId) {
+        Double avg = repository.getAverageDurationByElementId(elementId);
+        return avg != null ? avg : 0.0;
+    }
+}

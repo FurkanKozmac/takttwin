@@ -5,6 +5,9 @@ import com.furkankozmac.takttwin.core.application.service.*;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 
+import org.springframework.web.servlet.config.annotation.CorsRegistry;
+import org.springframework.web.servlet.config.annotation.WebMvcConfigurer;
+
 @Configuration
 public class ApplicationConfig {
 
@@ -33,5 +36,18 @@ public class ApplicationConfig {
     @Bean
     public AndonAlertService andonAlertService(AndonAlertPort andonAlertPort) {
         return new AndonAlertService(andonAlertPort);
+    }
+
+    @Bean
+    public WebMvcConfigurer corsConfigurer() {
+        return new WebMvcConfigurer() {
+            @Override
+            public void addCorsMappings(CorsRegistry registry) {
+                registry.addMapping("/**") // Projedeki tüm endpoint'lere uygula
+                        .allowedOrigins("*") // Geliştirme aşamasında tüm kökenlerden (origins) gelen isteklere izin ver
+                        .allowedMethods("GET", "POST", "PUT", "DELETE", "OPTIONS") // İzin verilen HTTP metotları
+                        .allowedHeaders("*"); // Tüm HTTP başlıklarına (headers) izin ver
+            }
+        };
     }
 }
