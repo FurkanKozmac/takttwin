@@ -1,12 +1,7 @@
 package com.furkankozmac.takttwin.infrastructure.config;
 
-import com.furkankozmac.takttwin.core.application.port.AndonAlertPort;
-import com.furkankozmac.takttwin.core.application.port.StationPort;
-import com.furkankozmac.takttwin.core.application.port.TelemetryLogPort;
-import com.furkankozmac.takttwin.core.application.port.WorkElementPort;
-import com.furkankozmac.takttwin.core.application.service.StationService;
-import com.furkankozmac.takttwin.core.application.service.TelemetryService;
-import com.furkankozmac.takttwin.core.application.service.YamazumiService;
+import com.furkankozmac.takttwin.core.application.port.*;
+import com.furkankozmac.takttwin.core.application.service.*;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 
@@ -28,5 +23,15 @@ public class ApplicationConfig {
                                            WorkElementPort workElementPort,
                                            TelemetryLogPort telemetryLogPort) {
         return new YamazumiService(stationPort, workElementPort, telemetryLogPort);
+    }
+
+    @Bean
+    public AuthService authService(UserPort userPort, RefreshTokenPort refreshTokenPort, PasswordPort passwordPort) {
+        return new AuthService(userPort, refreshTokenPort, passwordPort);
+    }
+
+    @Bean
+    public AndonAlertService andonAlertService(AndonAlertPort andonAlertPort) {
+        return new AndonAlertService(andonAlertPort);
     }
 }

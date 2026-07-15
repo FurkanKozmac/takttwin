@@ -8,6 +8,7 @@ import com.furkankozmac.takttwin.infrastructure.persistence.repository.AndonAler
 import org.springframework.stereotype.Component;
 
 import java.util.List;
+import java.util.Optional;
 import java.util.stream.Collectors;
 
 @Component
@@ -31,5 +32,10 @@ public class AndonAlertAdapter implements AndonAlertPort {
         return repository.findByResolvedFalse().stream()
                 .map(PersistenceMapper::toDomain)
                 .collect(Collectors.toList());
+    }
+
+    @Override
+    public Optional<AndonAlert> findById(Long id) {
+        return repository.findById(id).map(PersistenceMapper::toDomain);
     }
 }

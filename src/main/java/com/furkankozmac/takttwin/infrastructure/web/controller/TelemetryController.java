@@ -5,6 +5,7 @@ import com.furkankozmac.takttwin.core.domain.model.TelemetryLog;
 import com.furkankozmac.takttwin.infrastructure.web.dto.TelemetrySubmitRequest;
 import jakarta.validation.Valid;
 import org.springframework.http.ResponseEntity;
+import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.*;
 
 @RestController
@@ -18,6 +19,7 @@ public class TelemetryController {
     }
 
     @PostMapping
+    @PreAuthorize("hasAnyRole('ADMIN', 'TEAM_LEADER', 'OPERATOR')")
     public ResponseEntity<TelemetryLog> submitTelemetry(@Valid @RequestBody TelemetrySubmitRequest request) {
         TelemetryLog domainLog = TelemetryLog.builder()
                 .stationId(request.getStationId())

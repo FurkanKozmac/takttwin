@@ -17,6 +17,9 @@ public class AndonAlert {
     private String message;
     private boolean resolved;
     private LocalDateTime createdAt;
+    private LocalDateTime resolvedAt;
+    private String resolvedBy;
+    private String resolutionComment;
 
     public static AndonAlert create(Long stationId, Long cycleNumber, Double totalCycleTime, Double taktTime, String message) {
         return AndonAlert.builder()

@@ -1,13 +1,7 @@
 package com.furkankozmac.takttwin.infrastructure.persistence.mapper;
 
-import com.furkankozmac.takttwin.core.domain.model.AndonAlert;
-import com.furkankozmac.takttwin.core.domain.model.Station;
-import com.furkankozmac.takttwin.core.domain.model.TelemetryLog;
-import com.furkankozmac.takttwin.core.domain.model.WorkElement;
-import com.furkankozmac.takttwin.infrastructure.persistence.entity.AndonAlertEntity;
-import com.furkankozmac.takttwin.infrastructure.persistence.entity.StationEntity;
-import com.furkankozmac.takttwin.infrastructure.persistence.entity.TelemetryLogEntity;
-import com.furkankozmac.takttwin.infrastructure.persistence.entity.WorkElementEntity;
+import com.furkankozmac.takttwin.core.domain.model.*;
+import com.furkankozmac.takttwin.infrastructure.persistence.entity.*;
 
 import java.util.stream.Collectors;
 
@@ -110,6 +104,9 @@ public class PersistenceMapper {
                 .message(entity.getMessage())
                 .resolved(entity.isResolved())
                 .createdAt(entity.getCreatedAt())
+                .resolvedAt(entity.getResolvedAt())
+                .resolvedBy(entity.getResolvedBy())
+                .resolutionComment(entity.getResolutionComment())
                 .build();
     }
 
@@ -124,6 +121,50 @@ public class PersistenceMapper {
                 .message(domain.getMessage())
                 .resolved(domain.isResolved())
                 .createdAt(domain.getCreatedAt())
+                .resolvedAt(domain.getResolvedAt())
+                .resolvedBy(domain.getResolvedBy())
+                .resolutionComment(domain.getResolutionComment())
                 .build();
     }
+
+    public static User toDomain(UserEntity entity) {
+        if (entity == null) return null;
+        return User.builder()
+                .id(entity.getId())
+                .email(entity.getEmail())
+                .password(entity.getPassword())
+                .role(entity.getRole())
+                .build();
+    }
+
+    public static UserEntity toEntity(User domain) {
+        if (domain == null) return null;
+        return UserEntity.builder()
+                .id(domain.getId())
+                .email(domain.getEmail())
+                .password(domain.getPassword())
+                .role(domain.getRole())
+                .build();
+    }
+
+    public static RefreshToken toDomain(RefreshTokenEntity entity) {
+        if (entity == null) return null;
+        return RefreshToken.builder()
+                .id(entity.getId())
+                .token(entity.getToken())
+                .expiryDate(entity.getExpiryDate())
+                .user(toDomain(entity.getUser()))
+                .build();
+    }
+
+    public static RefreshTokenEntity toEntity(RefreshToken domain) {
+        if (domain == null) return null;
+        return RefreshTokenEntity.builder()
+                .id(domain.getId())
+                .token(domain.getToken())
+                .expiryDate(domain.getExpiryDate())
+                .user(toEntity(domain.getUser()))
+                .build();
+    }
+
 }

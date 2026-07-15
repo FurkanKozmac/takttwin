@@ -38,4 +38,13 @@ public class AndonAlertEntity {
 
     @Column(nullable = false)
     private LocalDateTime createdAt;
+
+    @Column
+    private LocalDateTime resolvedAt;
+
+    @Column
+    private String resolvedBy;
+
+    @Column
+    private String resolutionComment;
 }

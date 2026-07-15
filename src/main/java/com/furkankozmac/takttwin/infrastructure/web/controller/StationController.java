@@ -7,6 +7,7 @@ import com.furkankozmac.takttwin.infrastructure.web.dto.StationCreateRequest;
 import com.furkankozmac.takttwin.infrastructure.web.dto.WorkElementCreateRequest;
 import jakarta.validation.Valid;
 import org.springframework.http.ResponseEntity;
+import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.List;
@@ -22,6 +23,7 @@ public class StationController {
     }
 
     @PostMapping
+    @PreAuthorize("hasRole('ADMIN')")
     public ResponseEntity<Station> createStation(@Valid @RequestBody StationCreateRequest request) {
         Station domainStation = Station.builder()
                 .name(request.getName())
@@ -33,16 +35,19 @@ public class StationController {
     }
 
     @GetMapping
+    @PreAuthorize("hasAnyRole('ADMIN', 'TEAM_LEADER', 'OPERATOR')")
     public ResponseEntity<List<Station>> getAllStations() {
         return ResponseEntity.ok(stationService.getAllStations());
     }
 
     @GetMapping("/{id}")
+    @PreAuthorize("hasAnyRole('ADMIN', 'TEAM_LEADER', 'OPERATOR')")
     public ResponseEntity<Station> getStationById(@PathVariable("id") Long id) {
         return ResponseEntity.ok(stationService.getStationById(id));
     }
 
     @PostMapping("/{id}/elements")
+    @PreAuthorize("hasRole('ADMIN')")
     public ResponseEntity<WorkElement> addWorkElement(
             @PathVariable("id") Long id,
             @Valid @RequestBody WorkElementCreateRequest request) {
