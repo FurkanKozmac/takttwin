@@ -23,7 +23,10 @@ export default function SimulationController({ activeStationId, running, setRunn
   const { user } = useAuth()
   const [stations, setStations]       = useState([])
   const [cordBounce, setCordBounce]   = useState(false)
-  
+  const [pipelineQueue, setPipelineQueue] = useState([])   // [cycle# at st1, st2, ... st6]
+  const [vehiclesCompleted, setVehiclesCompleted] = useState(0)
+  const [lineLog, setLineLog]         = useState([])       // global conveyor-level log
+
   const runningRef   = useRef(false)
   const muriRef      = useRef(false)
 
@@ -69,132 +72,220 @@ export default function SimulationController({ activeStationId, running, setRunn
     return () => clearInterval(interval)
   }, [user])
 
-  // Async simulation runner for a single station
-  const runStationSimulation = useCallback(async (station) => {
+  // ---------------------------------------------------------------------------
+  // Pipeline Conveyor Belt Simulation Engine
+  // ---------------------------------------------------------------------------
+
+  /**
+   * Process all work elements for a single station on its assigned cycleNumber.
+   * Returns { totalMs, stationId } when done.
+   */
+  const processStation = async (station, cycleNumber) => {
     const stationId = station.id
     const elements = station.workElements || []
-    if (elements.length === 0) return
+    if (elements.length === 0) return { totalMs: 0, stationId }
 
-    let cycle = 0
-    // Set initial simulation state for this station
-    setSimStates(prev => ({
-      ...prev,
-      [stationId]: {
-        cycleCount: 0,
+    let cycleTotalMs = 0
+
+    for (let i = 0; i < elements.length; i++) {
+      if (!runningRef.current) break
+
+      const el = elements[i]
+
+      // Update active element status
+      setSimStates(prev => ({
+        ...prev,
+        [stationId]: {
+          ...(prev[stationId] || {}),
+          currentEl: el,
+          currentElIdx: i,
+          elProgress: 0,
+        }
+      }))
+
+      const humanFactor = randBetween(-1500, 1500)
+      const muriExtra   = muriRef.current ? randBetween(MURI_EXTRA_MIN, MURI_EXTRA_MAX) : 0
+      const actualMs    = Math.max(500, (el.standardDuration * 1000 + humanFactor + muriExtra))
+      const waitMs      = actualMs / SPEED_FACTOR
+      const actualSec   = actualMs / 1000
+
+      // Log element details
+      setSimStates(prev => ({
+        ...prev,
+        [stationId]: {
+          ...(prev[stationId] || {}),
+          logs: [`  ↳ ${el.name}: ${actualSec.toFixed(1)}s${muriRef.current ? ' ⚠ +muri' : ''}`, ...(prev[stationId]?.logs || [])].slice(0, 20)
+        }
+      }))
+
+      // Animate progress (10 steps for smoother display)
+      const steps = 10
+      for (let s = 0; s <= steps; s++) {
+        if (!runningRef.current) break
+        setSimStates(prev => ({
+          ...prev,
+          [stationId]: {
+            ...(prev[stationId] || {}),
+            elProgress: Math.round((s / steps) * 100)
+          }
+        }))
+        await sleep(waitMs / steps)
+      }
+
+      cycleTotalMs += actualMs
+
+      if (!runningRef.current) break
+
+      // Post telemetry
+      try {
+        await api.post('/telemetry', {
+          stationId:      stationId,
+          workElementId:  el.id,
+          actualDuration: parseFloat(actualSec.toFixed(2)),
+          cycleNumber:    cycleNumber,
+        })
+      } catch (err) {
+        setSimStates(prev => ({
+          ...prev,
+          [stationId]: {
+            ...(prev[stationId] || {}),
+            logs: [`  ✗ Telemetry error: ${err.response?.data?.message || err.message}`, ...(prev[stationId]?.logs || [])].slice(0, 20)
+          }
+        }))
+      }
+    }
+
+    return { totalMs: cycleTotalMs, stationId }
+  }
+
+  /**
+   * Main conveyor belt loop.
+   * Maintains a pipeline queue of 6 cycleNumbers — one per station.
+   * Each "pulse" starts all stations working in parallel on their assigned vehicles,
+   * waits for ALL 6 to finish, then shifts the conveyor belt forward.
+   */
+  const runConveyorBelt = useCallback(async (sortedStations) => {
+    const NUM_STATIONS = sortedStations.length
+    if (NUM_STATIONS === 0) return
+
+    // Initialize the pipeline: station 0 gets cycle 1, station 1 gets cycle 0 (not yet assigned), etc.
+    // Actually, we ramp up: only station 1 has work initially, then station 1+2, etc.
+    // For simplicity and matching real-world startup: fill all 6 slots at once.
+    let nextCycle = NUM_STATIONS + 1  // Next free cycle number after initial fill
+    let queue = []
+    for (let i = 0; i < NUM_STATIONS; i++) {
+      // Station 0 (Trim-1) gets the highest cycle, Station 5 (Inspection) gets the lowest
+      queue.push(NUM_STATIONS - i)
+    }
+    // queue = [6, 5, 4, 3, 2, 1] => Station 1 works on Cycle#6, Station 6 works on Cycle#1
+
+    setPipelineQueue([...queue])
+    let completed = 0
+
+    // Initialize simStates for all stations
+    const initialStates = {}
+    sortedStations.forEach((st, idx) => {
+      initialStates[st.id] = {
+        cycleCount: queue[idx],
         currentEl: null,
         currentElIdx: -1,
         elProgress: 0,
         totalTime: 0,
-        logs: [`▶ Station ${station.name} simulation initialized`]
+        logs: [`▶ Station ${st.name} initialized — Vehicle #${queue[idx]} on conveyor`]
       }
-    }))
+    })
+    setSimStates(prev => ({ ...prev, ...initialStates }))
 
+    const ts = () => new Date().toLocaleTimeString()
+
+    setLineLog([`[${ts()}] 🏭 Conveyor Belt started — ${NUM_STATIONS} vehicles loaded on line`])
+
+    // Main pulse loop
     while (runningRef.current) {
-      cycle++
-      
-      // Update cycle count
-      setSimStates(prev => ({
-        ...prev,
-        [stationId]: {
-          ...(prev[stationId] || {}),
-          cycleCount: cycle,
-          logs: [`── Cycle #${cycle} begins ──`, ...(prev[stationId]?.logs || [])].slice(0, 20)
-        }
-      }))
+      // Log current conveyor state
+      const queueStr = sortedStations.map((st, i) => `${st.name.split('-')[0]}#${queue[i]}`).join(' → ')
+      setLineLog(prev => [`[${ts()}] ━━ CONVEYOR PULSE ━━ ${queueStr}`, ...prev].slice(0, 30))
 
-      let cycleTotalMs = 0
-
-      for (let i = 0; i < elements.length; i++) {
-        if (!runningRef.current) break
-
-        const el = elements[i]
-        
-        // Update active element status
+      // Update cycle numbers for each station in simStates
+      sortedStations.forEach((st, idx) => {
         setSimStates(prev => ({
           ...prev,
-          [stationId]: {
-            ...(prev[stationId] || {}),
-            currentEl: el,
-            currentElIdx: i,
-            elProgress: 0
+          [st.id]: {
+            ...(prev[st.id] || {}),
+            cycleCount: queue[idx],
+            logs: [`── Vehicle #${queue[idx]} — processing begins ──`, ...(prev[st.id]?.logs || [])].slice(0, 20)
           }
         }))
+      })
 
-        const humanFactor = randBetween(-1500, 1500)
-        const muriExtra   = muriRef.current ? randBetween(MURI_EXTRA_MIN, MURI_EXTRA_MAX) : 0
-        const actualMs    = Math.max(500, (el.standardDuration * 1000 + humanFactor + muriExtra))
-        const waitMs      = actualMs / SPEED_FACTOR
-        const actualSec   = actualMs / 1000
+      // Launch ALL stations in parallel, each processing its assigned vehicle
+      const promises = sortedStations.map((st, idx) =>
+        processStation(st, queue[idx])
+      )
 
-        // Log element details
-        setSimStates(prev => ({
-          ...prev,
-          [stationId]: {
-            ...(prev[stationId] || {}),
-            logs: [`  ↳ ${el.name}: ${actualSec.toFixed(1)}s${muriRef.current ? ' ⚠ +muri' : ''}`, ...(prev[stationId]?.logs || [])].slice(0, 20)
-          }
-        }))
-
-        // Animate progress (10 steps for smoother parallel runs)
-        const steps = 10
-        for (let s = 0; s <= steps; s++) {
-          if (!runningRef.current) break
-          setSimStates(prev => ({
-            ...prev,
-            [stationId]: {
-              ...(prev[stationId] || {}),
-              elProgress: Math.round((s / steps) * 100)
-            }
-          }))
-          await sleep(waitMs / steps)
-        }
-
-        cycleTotalMs += actualMs
-
-        if (!runningRef.current) break
-
-        // Post telemetry
-        try {
-          await api.post('/telemetry', {
-            stationId:      stationId,
-            workElementId:  el.id,
-            actualDuration: parseFloat(actualSec.toFixed(2)),
-            cycleNumber:    cycle,
-          })
-        } catch (err) {
-          setSimStates(prev => ({
-            ...prev,
-            [stationId]: {
-              ...(prev[stationId] || {}),
-              logs: [`  ✗ Telemetry error: ${err.response?.data?.message || err.message}`, ...(prev[stationId]?.logs || [])].slice(0, 20)
-            }
-          }))
-        }
-      }
+      const results = await Promise.all(promises)
 
       if (!runningRef.current) break
 
-      const totalSec = parseFloat((cycleTotalMs / 1000).toFixed(1))
-      const isOverTakt = totalSec > (station.taktTime || 60)
+      // Log per-station completion times
+      results.forEach((res, idx) => {
+        const st = sortedStations[idx]
+        const totalSec = parseFloat((res.totalMs / 1000).toFixed(1))
+        const isOverTakt = totalSec > (st.taktTime || 60)
 
-      // Cycle completion update
-      setSimStates(prev => ({
-        ...prev,
-        [stationId]: {
-          ...(prev[stationId] || {}),
-          currentEl: null,
-          currentElIdx: -1,
-          elProgress: 0,
-          totalTime: totalSec,
-          logs: [
-            `✓ Cycle #${cycle} completed — total ${totalSec}s ${isOverTakt ? '▲ OVER TAKT' : '✓ OK'}`,
-            ...(prev[stationId]?.logs || [])
-          ].slice(0, 20)
+        setSimStates(prev => ({
+          ...prev,
+          [st.id]: {
+            ...(prev[st.id] || {}),
+            currentEl: null,
+            currentElIdx: -1,
+            elProgress: 0,
+            totalTime: totalSec,
+            logs: [
+              `✓ Vehicle #${queue[idx]} completed — ${totalSec}s ${isOverTakt ? '▲ OVER TAKT' : '✓ OK'}`,
+              ...(prev[st.id]?.logs || [])
+            ].slice(0, 20)
+          }
+        }))
+      })
+
+      // ===== CONVEYOR BELT SHIFT =====
+      // The vehicle at Station 6 (last station = Inspection) exits the factory
+      const exitedVehicle = queue[NUM_STATIONS - 1]
+      completed++
+      setVehiclesCompleted(completed)
+
+      setLineLog(prev => [
+        `[${ts()}] 🚗✅ Vehicle #${exitedVehicle} completed VES Quality Inspection and left the factory!`,
+        ...prev
+      ].slice(0, 30))
+
+      toast.success(`🚗 Vehicle #${exitedVehicle} left the factory!`, {
+        duration: 3000,
+        style: {
+          background: '#064e3b',
+          border: '1px solid #10b981',
+          color: '#ecfdf5',
+          fontSize: '12px',
         }
-      }))
+      })
 
-      // Short break before starting next cycle
-      await sleep(500)
+      // Shift the conveyor: each station receives the vehicle from the previous station
+      for (let i = NUM_STATIONS - 1; i > 0; i--) {
+        queue[i] = queue[i - 1]
+      }
+      // A brand-new vehicle enters Station 1
+      queue[0] = nextCycle++
+
+      setPipelineQueue([...queue])
+
+      setLineLog(prev => [
+        `[${ts()}] ⏩ Conveyor shifted — new Vehicle #${queue[0]} enters ${sortedStations[0].name}`,
+        ...prev
+      ].slice(0, 30))
+
+      // Short pause between conveyor pulses
+      await sleep(600)
     }
   }, [])
 
@@ -210,19 +301,19 @@ export default function SimulationController({ activeStationId, running, setRunn
 
     setRunning(true)
     runningRef.current = true
+    setVehiclesCompleted(0)
+    setLineLog([])
 
-    toast.success('▶ Parallel simulation started for all 6 stations!', { icon: '⚡' })
+    toast.success('🏭 Conveyor Belt Pipeline started — 6 vehicles on the line!', { icon: '⚡' })
 
-    // Trigger simulation for all 6 stations in parallel
-    stations.forEach(st => {
-      runStationSimulation(st)
-    })
+    // Trigger conveyor belt simulation
+    runConveyorBelt(stations)
   }
 
   const stopSimulation = () => {
     runningRef.current = false
     setRunning(false)
-    toast('⏹ Parallel simulation stopped', { icon: '🛑' })
+    toast('⏹ Conveyor Belt simulation stopped', { icon: '🛑' })
   }
 
   const triggerAndonCord = async () => {
@@ -273,7 +364,7 @@ export default function SimulationController({ activeStationId, running, setRunn
           <p className="section-label mb-1">Gemba Simulation</p>
           <h2 className="text-lg font-bold text-white flex items-center gap-2">
             <Activity size={18} color="#00d4aa" />
-            Parallel Simulation
+            Conveyor Belt Pipeline
           </h2>
         </div>
         <div className="flex items-center gap-2 text-xs font-mono">
@@ -287,6 +378,52 @@ export default function SimulationController({ activeStationId, running, setRunn
         </div>
       </div>
 
+      {/* Conveyor Pipeline Visual */}
+      {running && pipelineQueue.length > 0 && (
+        <div
+          className="rounded-xl p-3 border animate-fade-in"
+          style={{ background: '#060c1a', borderColor: '#1e3a5f66' }}
+        >
+          <div className="flex items-center justify-between mb-2">
+            <span className="text-[10px] font-mono font-bold text-cyan-400 tracking-wider flex items-center gap-1.5">
+              <Layers size={12} /> CONVEYOR BELT STATE
+            </span>
+            <span className="text-[10px] font-mono text-emerald-400 font-bold">
+              {vehiclesCompleted} vehicles completed
+            </span>
+          </div>
+          <div className="flex items-center gap-1 overflow-x-auto py-1">
+            {stations.map((st, idx) => (
+              <div key={st.id} className="flex items-center gap-1 flex-shrink-0">
+                <div
+                  className="rounded-lg px-2 py-1.5 text-center min-w-[80px] transition-all"
+                  style={{
+                    background: activeStationId === st.id ? '#00d4aa18' : '#0d1117',
+                    border: `1px solid ${activeStationId === st.id ? '#00d4aa44' : '#1f293766'}`,
+                  }}
+                >
+                  <p className="text-[8px] text-gray-500 font-mono truncate">{st.name}</p>
+                  <p className="text-sm font-black font-mono" style={{ color: '#00d4aa' }}>
+                    #{pipelineQueue[idx]}
+                  </p>
+                </div>
+                {idx < stations.length - 1 && (
+                  <ChevronRight size={12} className="text-gray-700 flex-shrink-0" />
+                )}
+              </div>
+            ))}
+            <div className="flex items-center gap-1 flex-shrink-0 ml-1">
+              <ChevronRight size={12} className="text-emerald-600" />
+              <div className="rounded-lg px-2 py-1.5 text-center min-w-[50px]"
+                style={{ background: '#064e3b33', border: '1px solid #10b98144' }}>
+                <p className="text-[8px] text-emerald-500 font-mono">EXIT</p>
+                <p className="text-xs font-bold text-emerald-400">🚗</p>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Station info */}
       {activeStation ? (
         <div className="grid grid-cols-3 gap-3">
@@ -299,7 +436,7 @@ export default function SimulationController({ activeStationId, running, setRunn
             <p className="text-xl font-bold font-mono text-white">{activeStation.workElements?.length || 0}</p>
           </div>
           <div className="bg-gray-900 rounded-lg p-3 text-center">
-            <p className="section-label mb-1">Cycle #</p>
+            <p className="section-label mb-1">Vehicle #</p>
             <p className="text-xl font-bold font-mono" style={{ color: '#00d4aa' }}>{activeSim.cycleCount}</p>
           </div>
         </div>
@@ -370,7 +507,7 @@ export default function SimulationController({ activeStationId, running, setRunn
             className="tt-btn tt-btn-primary flex-1 animate-pulse-green"
             id="sim-start-btn"
           >
-            <Play size={16} fill="currentColor" /> Start Parallel Simulation
+            <Play size={16} fill="currentColor" /> Start Conveyor Belt
           </button>
         ) : (
           <button
@@ -378,7 +515,7 @@ export default function SimulationController({ activeStationId, running, setRunn
             className="tt-btn tt-btn-danger flex-1"
             id="sim-stop-btn"
           >
-            <Square size={16} fill="currentColor" /> Stop
+            <Square size={16} fill="currentColor" /> Stop Line
           </button>
         )}
       </div>
@@ -435,7 +572,26 @@ export default function SimulationController({ activeStationId, running, setRunn
         </p>
       </div>
 
-      {/* Activity log */}
+      {/* Conveyor Line Log */}
+      {lineLog.length > 0 && (
+        <div>
+          <p className="section-label mb-2">Conveyor Belt Log</p>
+          <div
+            className="rounded-lg p-3 h-28 overflow-y-auto flex flex-col gap-0.5"
+            style={{ background: '#050810', border: '1px solid #1e3a5f44' }}
+          >
+            {lineLog.map((logLine, i) => (
+              <div key={i} className="text-[11px] font-mono" style={{
+                color: logLine.includes('✅') ? '#10b981' : logLine.includes('PULSE') ? '#60a5fa' : logLine.includes('⏩') ? '#a78bfa' : '#6b7280'
+              }}>
+                {logLine}
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* Station Activity log */}
       <div>
         <p className="section-label mb-2">Activity Log ({activeStation?.name})</p>
         <div

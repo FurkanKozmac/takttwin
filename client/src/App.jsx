@@ -182,7 +182,17 @@ function Dashboard() {
   }
 
   const getProductionCount = () => {
-    return Object.values(simStates).reduce((sum, state) => sum + (state.cycleCount || 0), 0)
+    // In conveyor belt mode, the number of completed vehicles is tracked by how many
+    // conveyor pulses have occurred. Station 6 (Inspection) cycle count tells us the
+    // latest vehicle being inspected; vehicles completed = highest station-1 cycle - initial offset.
+    // Simplest: count how many pulses happened = (station1 cycleCount - NUM_STATIONS)
+    const stationIds = Object.keys(simStates).map(Number).sort((a, b) => a - b)
+    if (stationIds.length === 0) return 0
+    const firstStation = stationIds[0]
+    const firstCycle = simStates[firstStation]?.cycleCount || 0
+    // First station starts at NUM_STATIONS (6), so vehicles completed = firstCycle - 6
+    const numStations = stationIds.length || 6
+    return Math.max(0, firstCycle - numStations)
   }
 
   const getActiveAnomaliesCount = () => {
