@@ -16,10 +16,12 @@ public class ApplicationConfig {
         return new StationService(stationPort, workElementPort);
     }
 
+ /*
     @Bean
     public TelemetryService telemetryService(TelemetryLogPort telemetryLogPort, StationPort stationPort, WorkElementPort workElementPort, AndonAlertPort andonAlertPort) {
         return new TelemetryService(telemetryLogPort, stationPort, workElementPort, andonAlertPort);
     }
+ */
 
     @Bean
     public YamazumiService yamazumiService(StationPort stationPort,

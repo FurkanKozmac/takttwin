@@ -326,3 +326,24 @@ body {
 
 .recharts-text { fill: #9ca3af !important; font-size: 12px !important; }
 .recharts-legend-item-text { color: #9ca3af !important; }
+
+/* ── Control Room Glow Animations ── */
+@keyframes pulse-red-slow {
+  0%, 100% { box-shadow: 0 0 20px rgba(239, 68, 68, 0.2); }
+  50%       { box-shadow: 0 0 40px rgba(239, 68, 68, 0.5); }
+}
+
+.animate-pulse-red-slow { animation: pulse-red-slow 3s ease-in-out infinite; }
+
+@keyframes pulse-green-slow {
+  0%, 100% { box-shadow: 0 0 20px rgba(0, 212, 170, 0.15); }
+  50%       { box-shadow: 0 0 35px rgba(0, 212, 170, 0.35); }
+}
+
+.animate-pulse-green-slow { animation: pulse-green-slow 3s ease-in-out infinite; }
+
+/* ── Neon hover borders ── */
+.hover-neon-cyan:hover {
+  border-color: rgba(0, 212, 170, 0.4) !important;
+  box-shadow: 0 0 15px rgba(0, 212, 170, 0.2) !important;
+}

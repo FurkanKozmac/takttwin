@@ -19,18 +19,31 @@ function randBetween(min, max) {
   return Math.random() * (max - min) + min
 }
 
-export default function SimulationController({ activeStationId }) {
+export default function SimulationController({ activeStationId, running, setRunning, muri, setMuri, simStates, setSimStates, activeOrder }) {
   const { user } = useAuth()
   const [stations, setStations]       = useState([])
-  const [running, setRunning]         = useState(false)
-  const [muri, setMuri]               = useState(false)
   const [cordBounce, setCordBounce]   = useState(false)
   
-  // Track simulation state for all stations: stationId -> { cycleCount, currentEl, currentElIdx, elProgress, totalTime, logs }
-  const [simStates, setSimStates]     = useState({})
-
   const runningRef   = useRef(false)
   const muriRef      = useRef(false)
+
+  // Auto-stop simulation when production order is completed
+  useEffect(() => {
+    if (activeOrder && activeOrder.status === 'COMPLETED' && running) {
+      runningRef.current = false
+      setRunning(false)
+      toast.success(`Production Order ${activeOrder.orderNumber} Completed Successfully!`, {
+        duration: 8000,
+        icon: '🎉',
+        style: {
+          border: '1px solid #10b981',
+          background: '#064e3b',
+          color: '#ecfdf5',
+          fontWeight: 'bold',
+        }
+      })
+    }
+  }, [activeOrder, running])
 
   // Keep refs in sync
   useEffect(() => { runningRef.current = running }, [running])

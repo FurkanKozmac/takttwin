@@ -23,7 +23,15 @@ export default function AdminSetup() {
   const [elType, setElType]         = useState('MANUAL')
   const [elVA, setElVA]             = useState(true)
 
+  // Production Orders state
+  const [orders, setOrders]         = useState([])
+  const [orderNumber, setOrderNumber] = useState('')
+  const [productModel, setProductModel] = useState('')
+  const [targetQuantity, setTargetQuantity] = useState('30')
+  const [orderLoading, setOrderLoading] = useState(false)
+
   const isAdmin = hasRole('ROLE_ADMIN')
+  const canManageOrders = hasRole('ROLE_ADMIN') || hasRole('ROLE_TEAM_LEADER')
 
   const fetchStations = async () => {
     try {
@@ -32,7 +40,19 @@ export default function AdminSetup() {
     } catch {}
   }
 
-  useEffect(() => { fetchStations() }, [])
+  const fetchOrders = async () => {
+    try {
+      const { data } = await api.get('/orders')
+      setOrders(Array.isArray(data) ? data : [])
+    } catch {}
+  }
+
+  useEffect(() => {
+    fetchStations()
+    if (canManageOrders) {
+      fetchOrders()
+    }
+  }, [user])
 
   const createStation = async (e) => {
     e.preventDefault()
@@ -45,7 +65,9 @@ export default function AdminSetup() {
       fetchStations()
     } catch (err) {
       toast.error(err.response?.data?.message || 'Failed to create station')
-    } finally { setLoading(false) }
+    } finally {
+      setLoading(false)
+    }
   }
 
   const createElement = async (e) => {
@@ -53,7 +75,6 @@ export default function AdminSetup() {
     if (!elStation || !elName || !elDuration) return
     setLoading(true)
 
-    // Convert workType to uppercase and map WALKING to WORKING to match Java enum
     let apiWorkType = elType.toUpperCase()
     if (apiWorkType === 'WALKING') {
       apiWorkType = 'WORKING'
@@ -65,14 +86,48 @@ export default function AdminSetup() {
         standardDuration: parseFloat(elDuration),
         workType: apiWorkType,
         isValueAdded: elVA,
-        valueAdded: elVA, // send both keys to handle Lombok vs Jackson boolean mapping
+        valueAdded: elVA,
       })
       toast.success(`Element "${elName}" added!`)
       setElName(''); setElDuration('')
       fetchStations()
     } catch (err) {
       toast.error(err.response?.data?.message || 'Failed to add element')
-    } finally { setLoading(false) }
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  const createOrder = async (e) => {
+    e.preventDefault()
+    if (!orderNumber || !productModel || !targetQuantity) return
+    setOrderLoading(true)
+    try {
+      await api.post('/orders', {
+        orderNumber,
+        productModel,
+        targetQuantity: parseInt(targetQuantity)
+      })
+      toast.success(`Order "${orderNumber}" created!`)
+      setOrderNumber('')
+      setProductModel('')
+      setTargetQuantity('30')
+      fetchOrders()
+    } catch (err) {
+      toast.error(err.response?.data?.message || 'Failed to create order')
+    } finally {
+      setOrderLoading(false)
+    }
+  }
+
+  const activateOrder = async (id) => {
+    try {
+      await api.put(`/orders/${id}/activate`)
+      toast.success('Production Order activated!')
+      fetchOrders()
+    } catch (err) {
+      toast.error(err.response?.data?.message || 'Failed to activate order')
+    }
   }
 
   const fetchStationElements = async (id) => {
@@ -91,22 +146,20 @@ export default function AdminSetup() {
   }
 
   if (!user) return null
+  if (!isAdmin && !canManageOrders) return null
 
   return (
     <div className="glass-card p-6 flex flex-col gap-5 animate-fade-in">
       <div className="flex items-center gap-2">
         <Settings size={18} color="#4a6fa5" />
         <div>
-          <p className="section-label">Admin Console</p>
-          <h2 className="text-lg font-bold text-white">Station Setup</h2>
+          <p className="section-label">MES Console</p>
+          <h2 className="text-lg font-bold text-white">Operations & Setup</h2>
         </div>
       </div>
 
-      {!isAdmin ? (
-        <p className="text-sm text-gray-500 text-center py-4">
-          This panel requires ROLE_ADMIN privileges
-        </p>
-      ) : (
+      {/* Create Station & Element Section (Admin Only) */}
+      {isAdmin && (
         <>
           {/* Create station */}
           <div>
@@ -133,7 +186,7 @@ export default function AdminSetup() {
               <button
                 type="submit"
                 disabled={loading}
-                className="tt-btn tt-btn-primary text-sm"
+                className="tt-btn tt-btn-primary text-sm font-bold"
               >
                 <Plus size={14} /> Create Station
               </button>
@@ -192,7 +245,7 @@ export default function AdminSetup() {
               <button
                 type="submit"
                 disabled={loading || !elStation}
-                className="tt-btn tt-btn-primary text-sm"
+                className="tt-btn tt-btn-primary text-sm font-bold"
               >
                 <Plus size={14} /> Add Element
               </button>
@@ -201,8 +254,92 @@ export default function AdminSetup() {
         </>
       )}
 
-      {/* Station list */}
-      {stations.length > 0 && (
+      {/* Production Order Management Section (Admin / Leader) */}
+      {canManageOrders && (
+        <div className="border-t border-gray-800 pt-4 flex flex-col gap-4">
+          <div>
+            <p className="section-label mb-3 flex items-center gap-1.5">
+              <Layers size={10} /> Production Orders
+            </p>
+            
+            {isAdmin ? (
+              <form onSubmit={createOrder} className="flex flex-col gap-2">
+                <div className="grid grid-cols-2 gap-2">
+                  <input
+                    className="tt-input"
+                    placeholder="Order No (e.g. PO-2026-001)"
+                    value={orderNumber}
+                    onChange={e => setOrderNumber(e.target.value)}
+                  />
+                  <input
+                    className="tt-input"
+                    placeholder="Model (e.g. Corolla Hybrid)"
+                    value={productModel}
+                    onChange={e => setProductModel(e.target.value)}
+                  />
+                </div>
+                <div className="flex gap-2">
+                  <input
+                    className="tt-input flex-1"
+                    type="number"
+                    placeholder="Target Quantity"
+                    value={targetQuantity}
+                    onChange={e => setTargetQuantity(e.target.value)}
+                  />
+                  <button
+                    type="submit"
+                    disabled={orderLoading || !orderNumber || !productModel}
+                    className="tt-btn tt-btn-primary text-sm font-bold whitespace-nowrap"
+                  >
+                    Create Order
+                  </button>
+                </div>
+              </form>
+            ) : (
+              <p className="text-[11px] text-gray-500 mb-2">Only Administrators can create new production orders.</p>
+            )}
+          </div>
+
+          {/* Orders List */}
+          <div className="flex flex-col gap-2">
+            <p className="text-[10px] font-bold text-gray-500 uppercase tracking-wider">Order Registry</p>
+            {orders.length === 0 ? (
+              <p className="text-xs text-gray-600 text-center py-2">No orders created yet</p>
+            ) : (
+              <div className="flex flex-col gap-2 max-h-48 overflow-y-auto pr-1 scrollbar-thin">
+                {orders.map(o => (
+                  <div key={o.id} className="flex items-center justify-between text-xs p-2.5 rounded bg-gray-950/80 border border-gray-900">
+                    <div>
+                      <div className="flex items-center gap-2">
+                        <span className="font-bold text-white font-mono">{o.orderNumber}</span>
+                        <span className={`px-1.5 py-0.2 rounded font-mono text-[9px] font-bold ${
+                          o.status === 'ACTIVE' ? 'bg-green-500/20 text-green-400' :
+                          o.status === 'COMPLETED' ? 'bg-cyan-500/20 text-cyan-400' :
+                          'bg-gray-500/20 text-gray-400'
+                        }`}>
+                          {o.status}
+                        </span>
+                      </div>
+                      <p className="text-[10px] text-gray-500 mt-1">{o.productModel} (Qty: {o.completedQuantity}/{o.targetQuantity})</p>
+                    </div>
+                    {o.status === 'PENDING' && (
+                      <button
+                        onClick={() => activateOrder(o.id)}
+                        className="px-2 py-1 bg-emerald-600 hover:bg-emerald-700 text-white rounded font-mono font-bold text-[10px] cursor-pointer transition-colors"
+                      >
+                        ACTIVATE
+                      </button>
+                    )}
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* Station list (Admin only) */}
+      {isAdmin && stations.length > 0 && (
         <div className="border-t border-gray-800 pt-4">
           <p className="section-label mb-3">Stations ({stations.length})</p>
           <div className="flex flex-col gap-2">
@@ -244,7 +381,7 @@ export default function AdminSetup() {
                           <span className="font-mono text-gray-500">{el.standardDuration}s</span>
                           <span
                             className="px-1.5 py-0.5 rounded font-mono font-bold"
-                           style={{
+                            style={{
                               background: el.workType === 'MANUAL' ? '#00d4aa22' : el.workType === 'WORKING' ? '#f59e0b22' : el.workType === 'MACHINE' ? '#4a90d922' : '#ef444422',
                               color: el.workType === 'MANUAL' ? '#00d4aa' : el.workType === 'WORKING' ? '#f59e0b' : el.workType === 'MACHINE' ? '#4a90d9' : '#ef4444',
                             }}

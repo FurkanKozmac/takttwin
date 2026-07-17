@@ -11,9 +11,9 @@ const ROLES = [
 ]
 
 const QUICK_USERS = [
-  { email: 'admin@tmmt.com',      password: 'mysecurepassword123', role: 'ROLE_ADMIN',          label: 'Admin',   color: '#4a90d9' },
-  { email: 'leader@tmmt.com',     password: 'password123',         role: 'ROLE_TEAM_LEADER',    label: 'Leader',  color: '#f59e0b' },
-  { email: 'operator1@tmmt.com',  password: 'mysecurepassword123', role: 'ROLE_OPERATOR',       label: 'Operator',color: '#10b981' },
+  { email: 'admin@example.com',      password: 'mysecurepassword123', role: 'ROLE_ADMIN',          label: 'Admin',   color: '#4a90d9' },
+  { email: 'leader@example.com',     password: 'password123',         role: 'ROLE_TEAM_LEADER',    label: 'Leader',  color: '#f59e0b' },
+  { email: 'operator1@example.com',  password: 'mysecurepassword123', role: 'ROLE_OPERATOR',       label: 'Operator',color: '#10b981' },
   { email: 'isguzmani@example.com', password: 'mysecurepassword123', role: 'ROLE_HSE_SPECIALIST', label: 'HSE',     color: '#a78bfa' },
 ]
 
@@ -167,7 +167,7 @@ export default function AuthPanel() {
               <input
                 className="tt-input"
                 type="email"
-                placeholder="operator@tmmt.com"
+                placeholder="operator@example.com"
                 value={email}
                 onChange={e => setEmail(e.target.value)}
                 autoComplete="email"
