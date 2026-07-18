@@ -10,4 +10,5 @@ public interface StationPort {
     Optional<Station> findById(Long id);
     Optional<Station> findByName(String name);
     List<Station> findAll();
+    List<Long> findAllIds();
 }

@@ -6,7 +6,7 @@ import { Settings, Plus, Layers, ChevronDown, ChevronRight } from 'lucide-react'
 
 const WORK_TYPES = ['MANUAL', 'WALKING', 'MACHINE', 'WAITING']
 
-export default function AdminSetup() {
+export default function AdminSetup({ showConfigOnly = false, showOrdersOnly = false }) {
   const { user, hasRole } = useAuth()
   const [stations, setStations]     = useState([])
   const [expanded, setExpanded]     = useState({})
@@ -146,20 +146,67 @@ export default function AdminSetup() {
   }
 
   if (!user) return null
-  if (!isAdmin && !canManageOrders) return null
+
+  if (showConfigOnly && !isAdmin) {
+    return (
+      <div className="glass-card p-6 flex flex-col gap-4 animate-fade-in border border-slate-800 bg-slate-900">
+        <div className="flex items-center gap-2 text-rose-500">
+          <Settings size={18} />
+          <h2 className="text-md font-bold">Access Denied</h2>
+        </div>
+        <p className="text-xs text-slate-400">
+          Only Administrators (ROLE_ADMIN) can configure stations and elements.
+        </p>
+      </div>
+    )
+  }
+
+  if (showOrdersOnly && !canManageOrders) {
+    return (
+      <div className="glass-card p-6 flex flex-col gap-4 animate-fade-in border border-slate-800 bg-slate-900">
+        <div className="flex items-center gap-2 text-rose-500">
+          <Settings size={18} />
+          <h2 className="text-md font-bold">Access Denied</h2>
+        </div>
+        <p className="text-xs text-slate-400">
+          Only Administrators or Team Leaders can manage production orders.
+        </p>
+      </div>
+    )
+  }
+
+  if (!showConfigOnly && !showOrdersOnly && !isAdmin && !canManageOrders) {
+    return null
+  }
+
+  const renderConfig = !showOrdersOnly && isAdmin
+  const renderOrders = !showConfigOnly && canManageOrders
+  const renderStationList = !showOrdersOnly && isAdmin
+
+  const title = showConfigOnly 
+    ? "Station Configuration" 
+    : showOrdersOnly 
+      ? "Production Orders" 
+      : "Operations & Setup"
+
+  const subtitle = showConfigOnly 
+    ? "Create and manage assembly line stations and work elements" 
+    : showOrdersOnly 
+      ? "Create and dispatch factory production orders" 
+      : "MES Console"
 
   return (
     <div className="glass-card p-6 flex flex-col gap-5 animate-fade-in">
       <div className="flex items-center gap-2">
-        <Settings size={18} color="#4a6fa5" />
+        <Settings size={18} color="#475569" />
         <div>
-          <p className="section-label">MES Console</p>
-          <h2 className="text-lg font-bold text-white">Operations & Setup</h2>
+          <p className="section-label">{subtitle}</p>
+          <h2 className="text-lg font-bold text-white">{title}</h2>
         </div>
       </div>
 
       {/* Create Station & Element Section (Admin Only) */}
-      {isAdmin && (
+      {renderConfig && (
         <>
           {/* Create station */}
           <div>
@@ -255,7 +302,7 @@ export default function AdminSetup() {
       )}
 
       {/* Production Order Management Section (Admin / Leader) */}
-      {canManageOrders && (
+      {renderOrders && (
         <div className="border-t border-gray-800 pt-4 flex flex-col gap-4">
           <div>
             <p className="section-label mb-3 flex items-center gap-1.5">
@@ -339,7 +386,7 @@ export default function AdminSetup() {
       )}
 
       {/* Station list (Admin only) */}
-      {isAdmin && stations.length > 0 && (
+      {renderStationList && stations.length > 0 && (
         <div className="border-t border-gray-800 pt-4">
           <p className="section-label mb-3">Stations ({stations.length})</p>
           <div className="flex flex-col gap-2">

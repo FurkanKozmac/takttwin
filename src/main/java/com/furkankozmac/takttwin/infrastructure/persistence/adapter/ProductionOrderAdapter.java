@@ -6,6 +6,7 @@ import com.furkankozmac.takttwin.infrastructure.persistence.entity.ProductionOrd
 import com.furkankozmac.takttwin.infrastructure.persistence.mapper.ProductionOrderMapper;
 import com.furkankozmac.takttwin.infrastructure.persistence.repository.ProductionOrderJpaRepository;
 import org.springframework.stereotype.Component;
+import org.springframework.transaction.annotation.Transactional;
 
 import java.util.List;
 import java.util.Optional;
@@ -48,5 +49,11 @@ public class ProductionOrderAdapter implements ProductionOrderPort {
     @Override
     public boolean existsByOrderNumber(String orderNumber) {
         return repository.existsByOrderNumber(orderNumber);
+    }
+
+    @Override
+    @Transactional
+    public void incrementCompletedQuantity(Long orderId) {
+        repository.incrementCompletedQuantity(orderId);
     }
 }

@@ -11,4 +11,5 @@ public interface ProductionOrderPort {
     Optional<ProductionOrder> findActiveOrder();
     List<ProductionOrder> findAll();
     boolean existsByOrderNumber(String orderNumber);
+    void incrementCompletedQuantity(Long orderId);
 }

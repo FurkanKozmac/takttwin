@@ -19,16 +19,20 @@ function randBetween(min, max) {
   return Math.random() * (max - min) + min
 }
 
-export default function SimulationController({ activeStationId, running, setRunning, muri, setMuri, simStates, setSimStates, activeOrder }) {
+export default function SimulationController({
+  activeStationId, running, setRunning, muri, setMuri,
+  simStates, setSimStates, activeOrder,
+  pipelineQueue, setPipelineQueue,
+  vehiclesCompleted, setVehiclesCompleted,
+  lineLog, setLineLog
+}) {
   const { user } = useAuth()
   const [stations, setStations]       = useState([])
   const [cordBounce, setCordBounce]   = useState(false)
-  const [pipelineQueue, setPipelineQueue] = useState([])   // [cycle# at st1, st2, ... st6]
-  const [vehiclesCompleted, setVehiclesCompleted] = useState(0)
-  const [lineLog, setLineLog]         = useState([])       // global conveyor-level log
 
   const runningRef   = useRef(false)
   const muriRef      = useRef(false)
+  const stationsRef  = useRef([])
 
   // Auto-stop simulation when production order is completed
   useEffect(() => {
@@ -52,6 +56,8 @@ export default function SimulationController({ activeStationId, running, setRunn
   useEffect(() => { runningRef.current = running }, [running])
   useEffect(() => { muriRef.current = muri }, [muri])
 
+  useEffect(() => { stationsRef.current = stations }, [stations])
+
   // Load all stations with elements
   const fetchAllStations = async () => {
     try {
@@ -68,7 +74,7 @@ export default function SimulationController({ activeStationId, running, setRunn
       return;
     }
     fetchAllStations()
-    const interval = setInterval(fetchAllStations, 5000)
+    const interval = setInterval(fetchAllStations, 30000)
     return () => clearInterval(interval)
   }, [user])
 
@@ -114,7 +120,7 @@ export default function SimulationController({ activeStationId, running, setRunn
         ...prev,
         [stationId]: {
           ...(prev[stationId] || {}),
-          logs: [`  ↳ ${el.name}: ${actualSec.toFixed(1)}s${muriRef.current ? ' ⚠ +muri' : ''}`, ...(prev[stationId]?.logs || [])].slice(0, 20)
+          logs: [`[${new Date().toLocaleTimeString()}]  ↳ ${el.name}: ${actualSec.toFixed(1)}s${muriRef.current ? ' ⚠ +muri' : ''}`, ...(prev[stationId]?.logs || [])].slice(0, 20)
         }
       }))
 
@@ -149,7 +155,7 @@ export default function SimulationController({ activeStationId, running, setRunn
           ...prev,
           [stationId]: {
             ...(prev[stationId] || {}),
-            logs: [`  ✗ Telemetry error: ${err.response?.data?.message || err.message}`, ...(prev[stationId]?.logs || [])].slice(0, 20)
+            logs: [`[${new Date().toLocaleTimeString()}]  ✗ Telemetry error: ${err.response?.data?.message || err.message}`, ...(prev[stationId]?.logs || [])].slice(0, 20)
           }
         }))
       }
@@ -191,7 +197,7 @@ export default function SimulationController({ activeStationId, running, setRunn
         currentElIdx: -1,
         elProgress: 0,
         totalTime: 0,
-        logs: [`▶ Station ${st.name} initialized — Vehicle #${queue[idx]} on conveyor`]
+        logs: [`[${new Date().toLocaleTimeString()}] ▶ Station ${st.name} initialized — Vehicle #${queue[idx]} on conveyor`]
       }
     })
     setSimStates(prev => ({ ...prev, ...initialStates }))
@@ -213,7 +219,7 @@ export default function SimulationController({ activeStationId, running, setRunn
           [st.id]: {
             ...(prev[st.id] || {}),
             cycleCount: queue[idx],
-            logs: [`── Vehicle #${queue[idx]} — processing begins ──`, ...(prev[st.id]?.logs || [])].slice(0, 20)
+            logs: [`[${new Date().toLocaleTimeString()}] ── Vehicle #${queue[idx]} — processing begins ──`, ...(prev[st.id]?.logs || [])].slice(0, 20)
           }
         }))
       })
@@ -242,7 +248,7 @@ export default function SimulationController({ activeStationId, running, setRunn
             elProgress: 0,
             totalTime: totalSec,
             logs: [
-              `✓ Vehicle #${queue[idx]} completed — ${totalSec}s ${isOverTakt ? '▲ OVER TAKT' : '✓ OK'}`,
+              `[${new Date().toLocaleTimeString()}] ✓ Vehicle #${queue[idx]} completed — ${totalSec}s ${isOverTakt ? '▲ OVER TAKT' : '✓ OK'}`,
               ...(prev[st.id]?.logs || [])
             ].slice(0, 20)
           }
@@ -378,51 +384,7 @@ export default function SimulationController({ activeStationId, running, setRunn
         </div>
       </div>
 
-      {/* Conveyor Pipeline Visual */}
-      {running && pipelineQueue.length > 0 && (
-        <div
-          className="rounded-xl p-3 border animate-fade-in"
-          style={{ background: '#060c1a', borderColor: '#1e3a5f66' }}
-        >
-          <div className="flex items-center justify-between mb-2">
-            <span className="text-[10px] font-mono font-bold text-cyan-400 tracking-wider flex items-center gap-1.5">
-              <Layers size={12} /> CONVEYOR BELT STATE
-            </span>
-            <span className="text-[10px] font-mono text-emerald-400 font-bold">
-              {vehiclesCompleted} vehicles completed
-            </span>
-          </div>
-          <div className="flex items-center gap-1 overflow-x-auto py-1">
-            {stations.map((st, idx) => (
-              <div key={st.id} className="flex items-center gap-1 flex-shrink-0">
-                <div
-                  className="rounded-lg px-2 py-1.5 text-center min-w-[80px] transition-all"
-                  style={{
-                    background: activeStationId === st.id ? '#00d4aa18' : '#0d1117',
-                    border: `1px solid ${activeStationId === st.id ? '#00d4aa44' : '#1f293766'}`,
-                  }}
-                >
-                  <p className="text-[8px] text-gray-500 font-mono truncate">{st.name}</p>
-                  <p className="text-sm font-black font-mono" style={{ color: '#00d4aa' }}>
-                    #{pipelineQueue[idx]}
-                  </p>
-                </div>
-                {idx < stations.length - 1 && (
-                  <ChevronRight size={12} className="text-gray-700 flex-shrink-0" />
-                )}
-              </div>
-            ))}
-            <div className="flex items-center gap-1 flex-shrink-0 ml-1">
-              <ChevronRight size={12} className="text-emerald-600" />
-              <div className="rounded-lg px-2 py-1.5 text-center min-w-[50px]"
-                style={{ background: '#064e3b33', border: '1px solid #10b98144' }}>
-                <p className="text-[8px] text-emerald-500 font-mono">EXIT</p>
-                <p className="text-xs font-bold text-emerald-400">🚗</p>
-              </div>
-            </div>
-          </div>
-        </div>
-      )}
+
 
       {/* Station info */}
       {activeStation ? (
@@ -601,13 +563,8 @@ export default function SimulationController({ activeStationId, running, setRunn
           {activeSim.logs.length === 0 ? (
             <p className="text-xs text-gray-600 text-center mt-4">No activity yet...</p>
           ) : activeSim.logs.map((logLine, i) => (
-            <div key={i} className="flex items-start gap-2 text-xs font-mono">
-              <span className="text-gray-600 flex-shrink-0">
-                {new Date().toLocaleTimeString()}
-              </span>
-              <span style={{ color: logColor[logLine.includes('✓') ? 'success' : logLine.includes('⚠') || logLine.includes('▲') ? 'warning' : logLine.includes('✗') ? 'error' : 'info'] }}>
-                {logLine}
-              </span>
+            <div key={i} className="text-xs font-mono" style={{ color: logLine.includes('✓') ? '#10b981' : logLine.includes('⚠') || logLine.includes('▲') ? '#f59e0b' : logLine.includes('✗') ? '#ef4444' : '#9ca3af' }}>
+              {logLine}
             </div>
           ))}
         </div>

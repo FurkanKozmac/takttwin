@@ -68,6 +68,8 @@ export default function AndonBoard({ activeStationId = 1, onAlertsUpdate }) {
     return () => {
       if (audioRef.current) {
         audioRef.current.pause()
+        audioRef.current.currentTime = 0
+        audioRef.current = null
       }
     }
   }, [])

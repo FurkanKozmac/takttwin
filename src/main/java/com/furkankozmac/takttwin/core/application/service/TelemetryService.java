@@ -1,6 +1,8 @@
 package com.furkankozmac.takttwin.core.application.service;
 
 import com.furkankozmac.takttwin.core.application.port.AndonAlertPort;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import com.furkankozmac.takttwin.core.application.port.StationPort;
 import com.furkankozmac.takttwin.core.application.port.TelemetryLogPort;
 import com.furkankozmac.takttwin.core.application.port.WorkElementPort;
@@ -14,6 +16,8 @@ import java.time.LocalDateTime;
 import java.util.List;
 
 public class TelemetryService {
+
+    private static final Logger log = LoggerFactory.getLogger(TelemetryService.class);
 
     private final TelemetryLogPort telemetryLogPort;
     private final StationPort stationPort;
@@ -65,15 +69,15 @@ public class TelemetryService {
 
         double taktTime = station.getTaktTime();
 
-        System.out.println(String.format("[ANALİZ] Çevrim #%d tamamlandı. İstasyon: %s | Toplam Süre: %.2fs | Hedef Takt Süresi: %.2fs",
-                cycleNumber, station.getName(), totalActualDuration, taktTime));
+        log.info("Çevrim #{} tamamlandı. İstasyon: {} | Toplam Süre: {}s | Hedef Takt Süresi: {}s",
+                cycleNumber, station.getName(), String.format("%.2f", totalActualDuration), String.format("%.2f", taktTime));
 
         if (totalActualDuration > taktTime) {
             double delay = totalActualDuration - taktTime;
             String alertMessage = String.format("ANDON UYARISI! %s istasyonunda Çevrim #%d için hedef Takt Süresi %.2f saniye aşıldı!",
                     station.getName(), cycleNumber, delay);
 
-            System.err.println("[!!!] " + alertMessage);
+            log.warn(alertMessage);
 
             AndonAlert alert = AndonAlert.create(stationId, cycleNumber, totalActualDuration, taktTime, alertMessage);
             andonAlertPort.save(alert);

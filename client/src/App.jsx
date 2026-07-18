@@ -6,8 +6,9 @@ import AndonBoard from './components/AndonBoard'
 import StationInspector from './components/StationInspector'
 import AdminSetup from './components/AdminSetup'
 import AssemblyLineFlowchart from './components/AssemblyLineFlowchart'
+import ErrorBoundary from './components/ErrorBoundary'
 import api from './api/axios'
-import { Activity, Factory, Shield, Wifi, Clock, Gauge, Heart, ShieldAlert } from 'lucide-react'
+import { Activity, Factory, Shield, Wifi, Clock, Gauge, Heart, ShieldAlert, Settings, ChevronRight, Layers } from 'lucide-react'
 import { useState, useEffect } from 'react'
 
 function Header() {
@@ -28,16 +29,7 @@ function Header() {
   const roleColor = roleColors[user?.role] || '#6b7280'
 
   return (
-    <header
-      style={{
-        background: 'rgba(5, 8, 16, 0.95)',
-        borderBottom: '1px solid #1f2937',
-        backdropFilter: 'blur(12px)',
-        position: 'sticky',
-        top: 0,
-        zIndex: 100,
-      }}
-    >
+    <header className="bg-slate-900 border-b border-slate-800 sticky top-0 z-50">
       <div className="w-full max-w-[1600px] mx-auto px-4 md:px-8 py-4 flex items-center justify-between gap-4">
         {/* Logo */}
         <div className="flex items-center gap-3">
@@ -135,6 +127,20 @@ function Dashboard() {
   const [running, setRunning]         = useState(false)
   const [muri, setMuri]               = useState(false)
   const [simStates, setSimStates]     = useState({})
+  const [pipelineQueue, setPipelineQueue] = useState([])
+  const [vehiclesCompleted, setVehiclesCompleted] = useState(0)
+  const [lineLog, setLineLog]         = useState([])
+
+  // Tab navigation state
+  const [activeTab, setActiveTab]     = useState('orders')
+
+  useEffect(() => {
+    const handler = () => {
+      setRunning(false)
+    }
+    window.addEventListener('auth:logout', handler)
+    return () => window.removeEventListener('auth:logout', handler)
+  }, [])
 
   const loadStations = async () => {
     try {
@@ -160,7 +166,10 @@ function Dashboard() {
       setRunning(false);
       setSimStates({});
       setActiveOrder(null);
+      setActiveTab('orders');
       return;
+    } else {
+      setActiveTab('dashboard');
     }
     loadStations()
     loadActiveOrder()
@@ -215,35 +224,35 @@ function Dashboard() {
 
       <main className="w-full max-w-[1600px] mx-auto px-4 md:px-8 py-6 flex flex-col gap-6">
         {/* Page title */}
-        <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 border-b border-gray-900 pb-5">
+        <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 border-b border-slate-800 pb-5">
           <div>
             <div className="flex items-center gap-3 mb-1.5">
               <div
-                className="px-2.5 py-0.5 rounded-full text-[10px] font-mono font-bold tracking-wider"
+                className="px-2.5 py-0.5 rounded text-[10px] font-mono font-bold tracking-wider"
                 style={{
-                  background: '#00d4aa22',
+                  background: '#00d4aa15',
                   color: '#00d4aa',
                   border: '1px solid #00d4aa33',
                 }}
               >
                 ● LIVE MONITOR
               </div>
-              <span className="text-gray-600 text-xs font-mono">
+              <span className="text-slate-500 text-xs font-mono">
                 Industrial Digital Twin MES v2.5
               </span>
             </div>
             <h2 className="text-2xl font-black text-white tracking-wide">
               Production Digital Twin Dashboard
             </h2>
-            <p className="text-gray-500 text-xs mt-0.5">
-              Real-time line balancing, active operator twin telemetry, and parallel assembly line simulation
+            <p className="text-slate-400 text-xs mt-0.5 font-medium">
+              Real-time line balancing, active operator twin telemetry, and conveyor belt queue simulator
             </p>
           </div>
         </div>
 
         {/* Completed Order Banner */}
         {activeOrder && activeOrder.status === 'COMPLETED' && (
-          <div className="bg-emerald-950/40 border border-emerald-500/30 rounded-xl p-4 flex items-center justify-between animate-fade-in shadow-[0_0_15px_rgba(16,185,129,0.1)] mb-1">
+          <div className="bg-emerald-500/10 border border-emerald-500/30 rounded p-4 flex items-center justify-between animate-fade-in shadow-sm">
             <div className="flex items-center gap-3">
               <span className="flex h-3 w-3 relative">
                 <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75" />
@@ -259,171 +268,276 @@ function Dashboard() {
           </div>
         )}
 
-        {/* 5 Sleek KPI Cards */}
-        {user && (
-          <div className="grid grid-cols-2 lg:grid-cols-5 gap-4 animate-fade-in">
-            {/* OEE */}
-            <div className="glass-card p-4 flex items-center justify-between border border-gray-800/80 shadow-[0_4px_20px_rgba(0,0,0,0.25)] relative overflow-hidden group hover:border-cyan-500/30 transition-all duration-300">
-              <div className="absolute top-0 left-0 h-[2px] w-full bg-gradient-to-r from-cyan-500 to-transparent opacity-30 group-hover:opacity-100 transition-opacity" />
-              <div>
-                <p className="text-[10px] font-bold text-gray-500 tracking-wider uppercase font-mono">Overall OEE</p>
-                <p className="text-2xl font-black text-white font-mono mt-1.5">{calculateOee()}</p>
-                <p className="text-[9px] text-cyan-400 mt-1 flex items-center gap-1">
-                  <span className="h-1.5 w-1.5 rounded-full bg-cyan-400 animate-pulse" /> Optimal Flow
-                </p>
-              </div>
-              <div className="bg-cyan-950/40 p-3 rounded-xl border border-cyan-900/30 text-cyan-400">
-                <Gauge size={20} />
-              </div>
-            </div>
+        {/* Main Grid: Sidebar + Content */}
+        <div className="flex flex-col lg:flex-row gap-6 flex-1 items-start">
+          
+          {/* LEFT SIDEBAR NAVIGATION MENU */}
+          <div className="w-full lg:w-64 flex-shrink-0 flex flex-col gap-1.5 bg-slate-900 p-3 rounded border border-slate-800 shadow-md">
+            <p className="text-[10px] font-bold text-slate-500 uppercase tracking-wider px-3 py-1 font-mono">Navigation</p>
+            {[
+              { id: 'dashboard', label: 'Dashboard', icon: Gauge, disabled: !user },
+              { id: 'simulator', label: 'Gemba Simulator', icon: Activity, disabled: !user },
+              { id: 'config', label: 'Configuration', icon: Settings, disabled: !user },
+              { id: 'orders', label: 'Security & Orders', icon: Shield, disabled: false },
+            ].map(tab => {
+              const Icon = tab.icon
+              const isActive = activeTab === tab.id
+              return (
+                <button
+                  key={tab.id}
+                  onClick={() => setActiveTab(tab.id)}
+                  disabled={tab.disabled}
+                  className={`flex items-center gap-3 px-4 py-3 rounded text-sm font-semibold tracking-wide transition-all duration-200 cursor-pointer text-left border ${
+                    isActive
+                      ? 'bg-slate-800 text-emerald-400 border-slate-700 shadow-sm'
+                      : 'text-slate-400 hover:bg-slate-800/40 hover:text-slate-200 hover:border-slate-800 border-transparent'
+                  } ${tab.disabled ? 'opacity-40 cursor-not-allowed' : ''}`}
+                >
+                  <Icon size={16} />
+                  <span>{tab.label}</span>
+                </button>
+              )
+            })}
+          </div>
 
-            {/* Today's Production */}
-            <div className="glass-card p-4 flex items-center justify-between border border-gray-800/80 shadow-[0_4px_20px_rgba(0,0,0,0.25)] relative overflow-hidden group hover:border-emerald-500/30 transition-all duration-300">
-              <div className="absolute top-0 left-0 h-[2px] w-full bg-gradient-to-r from-emerald-500 to-transparent opacity-30 group-hover:opacity-100 transition-opacity" />
-              <div>
-                <p className="text-[10px] font-bold text-gray-500 tracking-wider uppercase font-mono">Total Throughput</p>
-                <p className="text-2xl font-black text-white font-mono mt-1.5">{getProductionCount()} <span className="text-xs text-gray-500 font-normal">units</span></p>
-                <p className="text-[9px] text-emerald-400 mt-1 flex items-center gap-1">
-                  <span className="h-1.5 w-1.5 rounded-full bg-emerald-400 animate-pulse" /> Running Cycles
-                </p>
-              </div>
-              <div className="bg-emerald-950/40 p-3 rounded-xl border border-emerald-900/30 text-emerald-400">
-                <Activity size={20} />
-              </div>
-            </div>
-
-            {/* Active Anomalies */}
-            <div className="glass-card p-4 flex items-center justify-between border border-gray-800/80 shadow-[0_4px_20px_rgba(0,0,0,0.25)] relative overflow-hidden group hover:border-red-500/30 transition-all duration-300">
-              <div className="absolute top-0 left-0 h-[2px] w-full bg-gradient-to-r from-red-500 to-transparent opacity-30 group-hover:opacity-100 transition-opacity" />
-              <div>
-                <p className="text-[10px] font-bold text-gray-500 tracking-wider uppercase font-mono">Active Alerts</p>
-                <p className="text-2xl font-black text-white font-mono mt-1.5">{getActiveAnomaliesCount()}</p>
-                <p className="text-[9px] text-red-400 mt-1 flex items-center gap-1">
-                  <span className={`h-1.5 w-1.5 rounded-full ${getActiveAnomaliesCount() > 0 ? 'bg-red-500 animate-ping' : 'bg-gray-500'}`} /> 
-                  {getActiveAnomaliesCount() > 0 ? 'Action Required' : 'Line Secured'}
-                </p>
-              </div>
-              <div className={`p-3 rounded-xl border transition-colors ${getActiveAnomaliesCount() > 0 ? 'bg-red-950/40 border-red-900/30 text-red-400' : 'bg-gray-900/40 border-gray-800/30 text-gray-400'}`}>
-                <ShieldAlert size={20} />
-              </div>
-            </div>
-
-            {/* Line Health */}
-            <div className="glass-card p-4 flex items-center justify-between border border-gray-800/80 shadow-[0_4px_20px_rgba(0,0,0,0.25)] relative overflow-hidden group hover:border-violet-500/30 transition-all duration-300">
-              <div className="absolute top-0 left-0 h-[2px] w-full bg-gradient-to-r from-violet-500 to-transparent opacity-30 group-hover:opacity-100 transition-opacity" />
-              <div>
-                <p className="text-[10px] font-bold text-gray-500 tracking-wider uppercase font-mono">Line Health</p>
-                <p className="text-2xl font-black text-white font-mono mt-1.5">{getLineHealth()}</p>
-                <p className="text-[9px] text-violet-400 mt-1 flex items-center gap-1">
-                  <span className="h-1.5 w-1.5 rounded-full bg-violet-400 animate-pulse" /> Stability Index
-                </p>
-              </div>
-              <div className="bg-violet-950/40 p-3 rounded-xl border border-violet-900/30 text-violet-400">
-                <Heart size={20} />
-              </div>
-            </div>
-
-            {/* Active Production Order Card */}
-            <div className="glass-card p-4 flex flex-col justify-between border border-gray-800/80 shadow-[0_4px_20px_rgba(0,0,0,0.25)] relative overflow-hidden group hover:border-emerald-500/30 transition-all duration-300 col-span-2 lg:col-span-1">
-              <div className="absolute top-0 left-0 h-[2px] w-full bg-gradient-to-r from-emerald-500 to-transparent opacity-30 group-hover:opacity-100 transition-opacity" />
-              {activeOrder ? (
-                <div className="flex flex-col gap-2 h-full justify-between">
-                  <div className="flex items-center justify-between">
-                    <div>
-                      <p className="text-[10px] font-bold text-gray-500 tracking-wider uppercase font-mono">Active Order</p>
-                      <p className="text-sm font-black text-white font-mono mt-0.5">{activeOrder.orderNumber}</p>
+          {/* RIGHT MAIN CONTENT AREA */}
+          <div className="flex-1 flex flex-col gap-6 min-w-0 w-full">
+            
+            {/* 1. DASHBOARD VIEW */}
+            {activeTab === 'dashboard' && user && (
+              <div className="flex flex-col gap-6 animate-fade-in w-full">
+                
+                {/* 5 Sleek KPI Cards */}
+                <div className="grid grid-cols-2 lg:grid-cols-5 gap-4">
+                  
+                  {/* OEE */}
+                  <div className="bg-slate-900 p-5 rounded border border-slate-800 relative overflow-hidden group hover:border-cyan-500/30 transition-all duration-200 shadow-md">
+                    <div className="absolute top-0 left-0 h-[2px] w-full bg-gradient-to-r from-cyan-500 to-transparent opacity-30 group-hover:opacity-100 transition-opacity" />
+                    <div className="flex items-center justify-between">
+                      <div>
+                        <p className="text-[10px] font-bold text-slate-500 tracking-wider uppercase font-mono">Overall OEE</p>
+                        <p className="text-2xl font-black text-white font-mono mt-1.5">{calculateOee()}</p>
+                        <p className="text-[9px] text-cyan-400 mt-1 flex items-center gap-1">
+                          <span className="h-1.5 w-1.5 rounded-full bg-cyan-400 animate-pulse" /> Optimal Flow
+                        </p>
+                      </div>
+                      <div className="bg-slate-950 p-3 rounded border border-slate-800 text-cyan-400">
+                        <Gauge size={20} />
+                      </div>
                     </div>
-                    <span className={`px-1.5 py-0.5 rounded font-mono text-[9px] font-bold ${
-                      activeOrder.status === 'ACTIVE' ? 'bg-green-500/20 text-green-400' :
-                      activeOrder.status === 'COMPLETED' ? 'bg-cyan-500/20 text-cyan-400' :
-                      'bg-gray-500/20 text-gray-400'
-                    }`}>
-                      {activeOrder.status}
-                    </span>
                   </div>
-                  <div>
-                    <p className="text-[9px] text-gray-500 font-mono">Model: {activeOrder.productModel}</p>
-                    <div className="flex justify-between items-center text-[10px] text-gray-400 mt-1 font-mono">
-                      <span>Progress</span>
-                      <span className="font-bold text-emerald-400">
-                        {activeOrder.completedQuantity}/{activeOrder.targetQuantity} ({Math.round((activeOrder.completedQuantity / activeOrder.targetQuantity) * 100)}%)
+
+                  {/* Total Throughput */}
+                  <div className="bg-slate-900 p-5 rounded border border-slate-800 relative overflow-hidden group hover:border-emerald-500/30 transition-all duration-200 shadow-md">
+                    <div className="absolute top-0 left-0 h-[2px] w-full bg-gradient-to-r from-emerald-500 to-transparent opacity-30 group-hover:opacity-100 transition-opacity" />
+                    <div className="flex items-center justify-between">
+                      <div>
+                        <p className="text-[10px] font-bold text-slate-500 tracking-wider uppercase font-mono">Total Throughput</p>
+                        <p className="text-2xl font-black text-white font-mono mt-1.5">{getProductionCount()} <span className="text-xs text-slate-500 font-normal">units</span></p>
+                        <p className="text-[9px] text-emerald-400 mt-1 flex items-center gap-1">
+                          <span className="h-1.5 w-1.5 rounded-full bg-emerald-400 animate-pulse" /> Running Cycles
+                        </p>
+                      </div>
+                      <div className="bg-slate-950 p-3 rounded border border-slate-800 text-emerald-400">
+                        <Activity size={20} />
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Active Alerts */}
+                  <div className="bg-slate-900 p-5 rounded border border-slate-800 relative overflow-hidden group hover:border-rose-500/30 transition-all duration-200 shadow-md">
+                    <div className="absolute top-0 left-0 h-[2px] w-full bg-gradient-to-r from-rose-500 to-transparent opacity-30 group-hover:opacity-100 transition-opacity" />
+                    <div className="flex items-center justify-between">
+                      <div>
+                        <p className="text-[10px] font-bold text-slate-500 tracking-wider uppercase font-mono">Active Alerts</p>
+                        <p className="text-2xl font-black text-white font-mono mt-1.5">{getActiveAnomaliesCount()}</p>
+                        <p className="text-[9px] text-rose-500 mt-1 flex items-center gap-1">
+                          <span className={`h-1.5 w-1.5 rounded-full ${getActiveAnomaliesCount() > 0 ? 'bg-rose-500 animate-ping' : 'bg-slate-500'}`} /> 
+                          {getActiveAnomaliesCount() > 0 ? 'Action Required' : 'Line Secured'}
+                        </p>
+                      </div>
+                      <div className={`p-3 rounded border transition-colors bg-slate-950 border-slate-800 ${getActiveAnomaliesCount() > 0 ? 'text-rose-500' : 'text-slate-400'}`}>
+                        <ShieldAlert size={20} />
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Line Health */}
+                  <div className="bg-slate-900 p-5 rounded border border-slate-800 relative overflow-hidden group hover:border-violet-500/30 transition-all duration-200 shadow-md">
+                    <div className="absolute top-0 left-0 h-[2px] w-full bg-gradient-to-r from-violet-500 to-transparent opacity-30 group-hover:opacity-100 transition-opacity" />
+                    <div className="flex items-center justify-between">
+                      <div>
+                        <p className="text-[10px] font-bold text-slate-500 tracking-wider uppercase font-mono">Line Health</p>
+                        <p className="text-2xl font-black text-white font-mono mt-1.5">{getLineHealth()}</p>
+                        <p className="text-[9px] text-violet-400 mt-1 flex items-center gap-1">
+                          <span className="h-1.5 w-1.5 rounded-full bg-violet-400 animate-pulse" /> Stability Index
+                        </p>
+                      </div>
+                      <div className="bg-slate-950 p-3 rounded border border-slate-800 text-violet-400">
+                        <Heart size={20} />
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Active Production Order */}
+                  <div className="bg-slate-900 p-5 rounded border border-slate-800 relative overflow-hidden group hover:border-emerald-500/30 transition-all duration-200 shadow-md">
+                    <div className="absolute top-0 left-0 h-[2px] w-full bg-gradient-to-r from-emerald-500 to-transparent opacity-30 group-hover:opacity-100 transition-opacity" />
+                    {activeOrder ? (
+                      <div className="flex flex-col gap-2 h-full justify-between">
+                        <div className="flex items-center justify-between">
+                          <div>
+                            <p className="text-[10px] font-bold text-slate-500 tracking-wider uppercase font-mono">Active Order</p>
+                            <p className="text-sm font-black text-white font-mono mt-0.5">{activeOrder.orderNumber}</p>
+                          </div>
+                          <span className="px-1.5 py-0.5 rounded font-mono text-[9px] font-bold bg-emerald-500/10 text-emerald-400">
+                            {activeOrder.status}
+                          </span>
+                        </div>
+                        <div>
+                          <p className="text-[9px] text-slate-500 font-mono">Model: {activeOrder.productModel}</p>
+                          <div className="flex justify-between items-center text-[10px] text-slate-400 mt-1 font-mono">
+                            <span>Progress</span>
+                            <span className="font-bold text-emerald-400">
+                              {activeOrder.completedQuantity}/{activeOrder.targetQuantity} ({activeOrder.targetQuantity > 0 ? Math.round((activeOrder.completedQuantity / activeOrder.targetQuantity) * 100) : 0}%)
+                            </span>
+                          </div>
+                          <div className="h-1.5 bg-slate-950 rounded-full overflow-hidden border border-slate-800 mt-1">
+                            <div 
+                              className="h-full bg-emerald-500 rounded-full transition-all duration-300"
+                              style={{ width: `${Math.min(100, activeOrder.targetQuantity > 0 ? (activeOrder.completedQuantity / activeOrder.targetQuantity) * 100 : 0)}%` }}
+                            />
+                          </div>
+                        </div>
+                      </div>
+                    ) : (
+                      <div className="flex flex-col items-center justify-center py-2 text-center h-full">
+                        <p className="text-xs font-bold text-slate-500 font-mono">No Active Order</p>
+                        <p className="text-[9px] text-slate-600 mt-1 max-w-[150px] leading-relaxed">
+                          Activate a pending order in the Security & Orders tab to begin tracking.
+                        </p>
+                      </div>
+                    )}
+                  </div>
+                </div>
+
+                {/* Flowchart Panel (Full Width) */}
+                {stations.length > 0 && (
+                  <AssemblyLineFlowchart
+                    stations={stations}
+                    activeStationId={activeStationId}
+                    onSelectStation={setActiveStationId}
+                    alerts={alerts}
+                  />
+                )}
+
+                {/* Conveyor Pipeline Visual (Dashboard Tab) */}
+                {running && pipelineQueue.length > 0 && (
+                  <div className="bg-slate-900 p-4 rounded border border-slate-800 shadow-md w-full animate-fade-in">
+                    <div className="flex items-center justify-between mb-3">
+                      <span className="text-[10px] font-mono font-bold text-cyan-400 tracking-wider flex items-center gap-1.5">
+                        <Layers size={14} /> CONVEYOR BELT STATE
+                      </span>
+                      <span className="text-[10px] font-mono text-emerald-400 font-bold bg-emerald-500/10 px-2 py-0.5 rounded">
+                        {vehiclesCompleted} vehicles completed
                       </span>
                     </div>
-                    <div className="h-1.5 bg-gray-900 rounded-full overflow-hidden border border-gray-800 mt-1">
-                      <div 
-                        className="h-full bg-gradient-to-r from-emerald-500 to-teal-500 rounded-full transition-all duration-300"
-                        style={{ width: `${Math.min(100, (activeOrder.completedQuantity / activeOrder.targetQuantity) * 100)}%` }}
-                      />
+                    <div className="flex items-center gap-2 overflow-x-auto py-1 scrollbar-thin">
+                      {stations.map((st, idx) => (
+                        <div key={st.id} className="flex items-center gap-2 flex-shrink-0">
+                          <button
+                            onClick={() => setActiveStationId(st.id)}
+                            className={`rounded p-3 text-center min-w-[110px] border transition-all cursor-pointer ${
+                              activeStationId === st.id 
+                                ? 'bg-slate-800 border-emerald-500 text-emerald-400' 
+                                : 'bg-slate-950 border-slate-800 text-slate-300 hover:border-slate-700'
+                            }`}
+                          >
+                            <p className="text-[9px] text-slate-500 font-mono truncate">{st.name}</p>
+                            <p className="text-sm font-black font-mono mt-1">
+                              Vehicle #{pipelineQueue[idx]}
+                            </p>
+                          </button>
+                          {idx < stations.length - 1 && (
+                            <ChevronRight size={14} className="text-slate-700 flex-shrink-0" />
+                          )}
+                        </div>
+                      ))}
+                      <div className="flex items-center gap-2 flex-shrink-0 ml-2">
+                        <ChevronRight size={14} className="text-emerald-600" />
+                        <div className="rounded p-3 text-center min-w-[70px] bg-emerald-500/10 border border-emerald-500/30">
+                          <p className="text-[9px] text-emerald-400 font-mono font-bold">EXIT LANE</p>
+                          <p className="text-sm font-bold text-emerald-400 mt-1">🚗 PASS</p>
+                        </div>
+                      </div>
                     </div>
                   </div>
-                </div>
-              ) : (
-                <div className="flex flex-col items-center justify-center py-4 text-center h-full">
-                  <p className="text-xs font-bold text-gray-500">No Active Order</p>
-                  <p className="text-[9px] text-gray-600 mt-1 max-w-[150px] leading-relaxed">
-                    Activate a pending order in the console to track progress.
-                  </p>
-                </div>
-              )}
-            </div>
-          </div>
-        )}
+                )}
 
-        {/* Flowchart Panel (Full Width) */}
-        {user && stations.length > 0 && (
-          <div className="animate-fade-in">
-            <AssemblyLineFlowchart
-              stations={stations}
-              activeStationId={activeStationId}
-              onSelectStation={setActiveStationId}
-              alerts={alerts}
-            />
-          </div>
-        )}
-
-        {/* Main layout below top panels */}
-        <div className="grid grid-cols-1 xl:grid-cols-12 gap-6">
-          {/* LEFT COLUMN — Auth + Setup + Simulation */}
-          <div className="xl:col-span-4 flex flex-col gap-6">
-            <AuthPanel />
-            {user && <AdminSetup />}
-            {user && (
-              <SimulationController 
-                activeStationId={activeStationId}
-                running={running}
-                setRunning={setRunning}
-                muri={muri}
-                setMuri={setMuri}
-                simStates={simStates}
-                setSimStates={setSimStates}
-                activeOrder={activeOrder}
-              />
+                {/* Main layout: Andon Board + Station Inspector */}
+                <div className="grid grid-cols-1 xl:grid-cols-12 gap-6 w-full">
+                  <div className="xl:col-span-4 flex flex-col gap-6">
+                    <AndonBoard
+                      activeStationId={activeStationId}
+                      onAlertsUpdate={setAlerts}
+                    />
+                  </div>
+                  <div className="xl:col-span-8 flex flex-col gap-6">
+                    <StationInspector 
+                      activeStationId={activeStationId}
+                      station={stations.find(s => s.id === activeStationId)}
+                      activeSim={simStates[activeStationId]}
+                      alerts={alerts}
+                      running={running}
+                    />
+                  </div>
+                </div>
+              </div>
             )}
-          </div>
 
-          {/* RIGHT COLUMN — Andon + Station Twin Inspector */}
-          <div className="xl:col-span-8 flex flex-col gap-6">
-            {user && (
-              <>
-                <AndonBoard
+            {/* 2. GEMBA SIMULATOR VIEW */}
+            {activeTab === 'simulator' && user && (
+              <div className="animate-fade-in w-full">
+                <SimulationController 
                   activeStationId={activeStationId}
-                  onAlertsUpdate={setAlerts}
-                />
-                <StationInspector 
-                  activeStationId={activeStationId}
-                  station={stations.find(s => s.id === activeStationId)}
-                  activeSim={simStates[activeStationId]}
-                  alerts={alerts}
                   running={running}
+                  setRunning={setRunning}
+                  muri={muri}
+                  setMuri={setMuri}
+                  simStates={simStates}
+                  setSimStates={setSimStates}
+                  activeOrder={activeOrder}
+                  pipelineQueue={pipelineQueue}
+                  setPipelineQueue={setPipelineQueue}
+                  vehiclesCompleted={vehiclesCompleted}
+                  setVehiclesCompleted={setVehiclesCompleted}
+                  lineLog={lineLog}
+                  setLineLog={setLineLog}
                 />
-              </>
+              </div>
+            )}
+
+            {/* 3. CONFIGURATION VIEW */}
+            {activeTab === 'config' && user && (
+              <div className="animate-fade-in w-full">
+                <AdminSetup showConfigOnly={true} />
+              </div>
+            )}
+
+            {/* 4. SECURITY & ORDERS VIEW */}
+            {activeTab === 'orders' && (
+              <div className="animate-fade-in flex flex-col gap-6 w-full">
+                <AuthPanel />
+                {user && (
+                  <AdminSetup showOrdersOnly={true} />
+                )}
+              </div>
             )}
           </div>
         </div>
 
         {/* Footer */}
-        <footer className="mt-6 pt-6 border-t border-gray-900 text-center">
-          <p className="text-xs text-gray-700 font-mono">
+        <footer className="mt-6 pt-6 border-t border-slate-900 text-center">
+          <p className="text-xs text-slate-700 font-mono">
             TaktTwin MES · Spring Boot 4.1.0 + React 19 · Real-time Industrial Dashboard
           </p>
         </footer>
@@ -468,7 +582,9 @@ export default function App() {
           },
         }}
       />
-      <Dashboard />
+      <ErrorBoundary>
+        <Dashboard />
+      </ErrorBoundary>
     </AuthProvider>
   )
 }

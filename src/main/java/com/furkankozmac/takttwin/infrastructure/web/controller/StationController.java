@@ -1,6 +1,8 @@
 package com.furkankozmac.takttwin.infrastructure.web.controller;
 
 import com.furkankozmac.takttwin.core.application.service.StationService;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import com.furkankozmac.takttwin.core.domain.model.Station;
 import com.furkankozmac.takttwin.core.domain.model.WorkElement;
 import com.furkankozmac.takttwin.infrastructure.web.dto.StationCreateRequest;
@@ -15,6 +17,8 @@ import java.util.List;
 @RestController
 @RequestMapping("/api/stations")
 public class StationController {
+
+    private static final Logger log = LoggerFactory.getLogger(StationController.class);
 
     private final StationService stationService;
 
@@ -52,7 +56,7 @@ public class StationController {
             @PathVariable("id") Long id,
             @Valid @RequestBody WorkElementCreateRequest request) {
 
-        System.out.println("[DEBUG - CONTROLLER] URL'den Gelen ID: " + id);
+        log.debug("URL'den Gelen ID: {}", id);
 
         WorkElement domainElement = WorkElement.builder()
                 .name(request.getName())
@@ -62,7 +66,7 @@ public class StationController {
                 .stationId(id)
                 .build();
 
-        System.out.println("[DEBUG - CONTROLLER] Nesneye Setlenen Station ID: " + domainElement.getStationId());
+        log.debug("Nesneye Setlenen Station ID: {}", domainElement.getStationId());
 
         WorkElement created = stationService.addWorkElement(domainElement);
         return ResponseEntity.ok(created);

@@ -43,4 +43,9 @@ public class StationAdapter implements StationPort {
                 .map(PersistenceMapper::toDomain)
                 .collect(Collectors.toList());
     }
+
+    @Override
+    public List<Long> findAllIds() {
+        return repository.findAll().stream().map(StationEntity::getId).collect(Collectors.toList());
+    }
 }
