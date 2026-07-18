@@ -36,8 +36,26 @@ public class ApplicationConfig {
     }
 
     @Bean
-    public AndonAlertService andonAlertService(AndonAlertPort andonAlertPort) {
-        return new AndonAlertService(andonAlertPort);
+    public AndonAlertService andonAlertService(AndonAlertPort andonAlertPort, org.springframework.context.ApplicationEventPublisher eventPublisher) {
+        return new AndonAlertService(andonAlertPort, eventPublisher);
+    }
+
+    @Bean
+    public OeeService oeeService(ProductionOrderPort productionOrderPort,
+                                 TelemetryLogPort telemetryLogPort,
+                                 AndonAlertPort andonAlertPort,
+                                 StationPort stationPort) {
+        return new OeeService(productionOrderPort, telemetryLogPort, andonAlertPort, stationPort);
+    }
+
+    @Bean
+    public VehicleService vehicleService(VehiclePort vehiclePort) {
+        return new VehicleService(vehiclePort);
+    }
+
+    @Bean
+    public MaterialService materialService(MaterialPort materialPort, org.springframework.context.ApplicationEventPublisher eventPublisher) {
+        return new MaterialService(materialPort, eventPublisher);
     }
 
     @Bean

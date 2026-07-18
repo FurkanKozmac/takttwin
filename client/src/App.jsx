@@ -1,4 +1,4 @@
-import { Toaster } from 'react-hot-toast'
+import { Toaster, toast } from 'react-hot-toast'
 import { AuthProvider, useAuth } from './context/AuthContext'
 import AuthPanel from './components/AuthPanel'
 import SimulationController from './components/SimulationController'
@@ -7,8 +7,11 @@ import StationInspector from './components/StationInspector'
 import AdminSetup from './components/AdminSetup'
 import AssemblyLineFlowchart from './components/AssemblyLineFlowchart'
 import ErrorBoundary from './components/ErrorBoundary'
+import TraceabilityPanel from './components/TraceabilityPanel'
+import AlarmHistoryPanel from './components/AlarmHistoryPanel'
+import InventoryPanel from './components/InventoryPanel'
 import api from './api/axios'
-import { Activity, Factory, Shield, Wifi, Clock, Gauge, Heart, ShieldAlert, Settings, ChevronRight, Layers } from 'lucide-react'
+import { Activity, Factory, Shield, Wifi, Clock, Gauge, Heart, ShieldAlert, Settings, ChevronRight, Layers, Search } from 'lucide-react'
 import { useState, useEffect } from 'react'
 
 function Header() {
@@ -122,6 +125,7 @@ function Dashboard() {
 
   // Active Production Order state
   const [activeOrder, setActiveOrder] = useState(null)
+  const [oeeData, setOeeData] = useState(null)
 
   // Lifted simulation states
   const [running, setRunning]         = useState(false)
@@ -160,12 +164,24 @@ function Dashboard() {
     }
   }
 
+  const loadOeeData = async () => {
+    try {
+      const { data } = await api.get('/orders/active/oee')
+      setOeeData(data)
+    } catch (err) {
+      if (err.response && err.response.status === 404) {
+        setOeeData(null)
+      }
+    }
+  }
+
   useEffect(() => {
     if (!user) {
       setStations([]);
       setRunning(false);
       setSimStates({});
       setActiveOrder(null);
+      setOeeData(null);
       setActiveTab('orders');
       return;
     } else {
@@ -173,11 +189,80 @@ function Dashboard() {
     }
     loadStations()
     loadActiveOrder()
-    const stationInterval = setInterval(loadStations, 5000)
-    const orderInterval = setInterval(loadActiveOrder, 2000)
+    loadOeeData()
+  }, [user])
+
+  useEffect(() => {
+    if (!user) return
+
+    const sseUrl = 'http://localhost:8080/api/sse/subscribe'
+    const eventSource = new EventSource(sseUrl)
+
+    eventSource.onopen = () => {
+      console.log('SSE connection established successfully')
+    }
+
+    eventSource.addEventListener('telemetry', (e) => {
+      console.log('SSE telemetry event received:', e.data)
+      try {
+        // Trigger Yamazumi chart refresh
+        window.dispatchEvent(new CustomEvent('yamazumi-refresh'))
+        // Trigger OEE refresh to update gauges/KPIs
+        loadOeeData()
+      } catch (err) {
+        console.error('Error handling SSE telemetry event:', err)
+      }
+    })
+
+    eventSource.addEventListener('andon', (e) => {
+      console.log('SSE andon event received:', e.data)
+      try {
+        // Trigger Andon Board alert list refresh
+        window.dispatchEvent(new CustomEvent('andon-refresh'))
+        // Refresh OEE data to decay OEE score instantly
+        loadOeeData()
+      } catch (err) {
+        console.error('Error handling SSE andon event:', err)
+      }
+    })
+
+    eventSource.addEventListener('order-update', (e) => {
+      console.log('SSE order-update event received:', e.data)
+      try {
+        const updatedOrder = JSON.parse(e.data)
+        setActiveOrder((prevOrder) => {
+          // If completed quantity changed, show a success toast!
+          if (prevOrder && updatedOrder.completedQuantity > prevOrder.completedQuantity) {
+            toast.success(`Vehicle completed! Completed: ${updatedOrder.completedQuantity}/${updatedOrder.targetQuantity}`, {
+              icon: '🚗',
+              style: { background: '#0b1329', border: '1px solid #10b981', color: '#a7f3d0' }
+            })
+          }
+          return updatedOrder
+        })
+        // Refresh OEE data
+        loadOeeData()
+      } catch (err) {
+        console.error('Error handling SSE order-update event:', err)
+      }
+    })
+
+    eventSource.addEventListener('material-update', (e) => {
+      console.log('SSE material-update event received:', e.data)
+      try {
+        window.dispatchEvent(new CustomEvent('material-refresh', { detail: JSON.parse(e.data) }))
+      } catch (err) {
+        console.error('Error handling SSE material-update event:', err)
+      }
+    })
+
+    eventSource.onerror = (err) => {
+      console.error('SSE connection error:', err)
+    }
+
     return () => {
-      clearInterval(stationInterval)
-      clearInterval(orderInterval)
+      eventSource.close()
+      console.log('SSE connection closed')
     }
   }, [user])
 
@@ -275,23 +360,25 @@ function Dashboard() {
           <div className="w-full lg:w-64 flex-shrink-0 flex flex-col gap-1.5 bg-slate-900 p-3 rounded border border-slate-800 shadow-md">
             <p className="text-[10px] font-bold text-slate-500 uppercase tracking-wider px-3 py-1 font-mono">Navigation</p>
             {[
-              { id: 'dashboard', label: 'Dashboard', icon: Gauge, disabled: !user },
-              { id: 'simulator', label: 'Gemba Simulator', icon: Activity, disabled: !user },
-              { id: 'config', label: 'Configuration', icon: Settings, disabled: !user },
-              { id: 'orders', label: 'Security & Orders', icon: Shield, disabled: false },
-            ].map(tab => {
+              { id: 'dashboard', label: 'Dashboard', icon: Gauge, show: !!user },
+              { id: 'simulator', label: 'Gemba Simulator', icon: Activity, show: !!user },
+              { id: 'traceability', label: 'Traceability', icon: Search, show: !!user },
+              { id: 'inventory', label: 'Inventory', icon: Layers, show: !!user },
+              { id: 'alarmHistory', label: 'Alarm History', icon: ShieldAlert, show: user && (user.role === 'ROLE_TEAM_LEADER' || user.role === 'ROLE_HSE_SPECIALIST') },
+              { id: 'config', label: 'Configuration', icon: Settings, show: !!user },
+              { id: 'orders', label: 'Security & Orders', icon: Shield, show: true },
+            ].filter(tab => tab.show).map(tab => {
               const Icon = tab.icon
               const isActive = activeTab === tab.id
               return (
                 <button
                   key={tab.id}
                   onClick={() => setActiveTab(tab.id)}
-                  disabled={tab.disabled}
                   className={`flex items-center gap-3 px-4 py-3 rounded text-sm font-semibold tracking-wide transition-all duration-200 cursor-pointer text-left border ${
                     isActive
                       ? 'bg-slate-800 text-emerald-400 border-slate-700 shadow-sm'
                       : 'text-slate-400 hover:bg-slate-800/40 hover:text-slate-200 hover:border-slate-800 border-transparent'
-                  } ${tab.disabled ? 'opacity-40 cursor-not-allowed' : ''}`}
+                  }`}
                 >
                   <Icon size={16} />
                   <span>{tab.label}</span>
@@ -316,13 +403,40 @@ function Dashboard() {
                     <div className="flex items-center justify-between">
                       <div>
                         <p className="text-[10px] font-bold text-slate-500 tracking-wider uppercase font-mono">Overall OEE</p>
-                        <p className="text-2xl font-black text-white font-mono mt-1.5">{calculateOee()}</p>
+                        <p className="text-2xl font-black text-white font-mono mt-1.5">{oeeData ? `${oeeData.oeePercentage}%` : '0.0%'}</p>
                         <p className="text-[9px] text-cyan-400 mt-1 flex items-center gap-1">
-                          <span className="h-1.5 w-1.5 rounded-full bg-cyan-400 animate-pulse" /> Optimal Flow
+                          A:{oeeData ? oeeData.availability : 0}% | P:{oeeData ? oeeData.performance : 0}% | Q:{oeeData ? oeeData.quality : 0}%
                         </p>
                       </div>
-                      <div className="bg-slate-950 p-3 rounded border border-slate-800 text-cyan-400">
-                        <Gauge size={20} />
+                      <div className="bg-slate-950 p-1 rounded border border-slate-800 text-cyan-400">
+                        <div className="relative flex items-center justify-center w-12 h-12">
+                          <svg className="w-full h-full transform -rotate-90">
+                            <circle
+                              cx="24"
+                              cy="24"
+                              r="18"
+                              className="text-slate-800"
+                              strokeWidth="3"
+                              stroke="currentColor"
+                              fill="transparent"
+                            />
+                            <circle
+                              cx="24"
+                              cy="24"
+                              r="18"
+                              className="text-cyan-400"
+                              strokeWidth="3"
+                              strokeDasharray={2 * Math.PI * 18}
+                              strokeDashoffset={2 * Math.PI * 18 * (1 - (oeeData ? oeeData.oeePercentage : 0.0) / 100)}
+                              strokeLinecap="round"
+                              stroke="currentColor"
+                              fill="transparent"
+                            />
+                          </svg>
+                          <span className="absolute text-[8px] font-bold text-white font-mono">
+                            {oeeData ? oeeData.oeePercentage : 0}%
+                          </span>
+                        </div>
                       </div>
                     </div>
                   </div>
@@ -333,7 +447,7 @@ function Dashboard() {
                     <div className="flex items-center justify-between">
                       <div>
                         <p className="text-[10px] font-bold text-slate-500 tracking-wider uppercase font-mono">Total Throughput</p>
-                        <p className="text-2xl font-black text-white font-mono mt-1.5">{getProductionCount()} <span className="text-xs text-slate-500 font-normal">units</span></p>
+                        <p className="text-2xl font-black text-white font-mono mt-1.5">{oeeData ? oeeData.totalCompletedUnits : 0} <span className="text-xs text-slate-500 font-normal">units</span></p>
                         <p className="text-[9px] text-emerald-400 mt-1 flex items-center gap-1">
                           <span className="h-1.5 w-1.5 rounded-full bg-emerald-400 animate-pulse" /> Running Cycles
                         </p>
@@ -350,13 +464,18 @@ function Dashboard() {
                     <div className="flex items-center justify-between">
                       <div>
                         <p className="text-[10px] font-bold text-slate-500 tracking-wider uppercase font-mono">Active Alerts</p>
-                        <p className="text-2xl font-black text-white font-mono mt-1.5">{getActiveAnomaliesCount()}</p>
-                        <p className="text-[9px] text-rose-500 mt-1 flex items-center gap-1">
-                          <span className={`h-1.5 w-1.5 rounded-full ${getActiveAnomaliesCount() > 0 ? 'bg-rose-500 animate-ping' : 'bg-slate-500'}`} /> 
-                          {getActiveAnomaliesCount() > 0 ? 'Action Required' : 'Line Secured'}
-                        </p>
+                        <p className="text-2xl font-black text-white font-mono mt-1.5">{oeeData ? oeeData.activeAlertCount : 0}</p>
+                        <div className="text-[9px] text-rose-500 mt-1 flex flex-col gap-0.5 w-full">
+                          <span className="flex items-center gap-1">
+                            <span className={`h-1.5 w-1.5 rounded-full ${(oeeData?.activeAlertCount || 0) > 0 ? 'bg-rose-500 animate-ping' : 'bg-slate-500'}`} /> 
+                            {(oeeData?.activeAlertCount || 0) > 0 ? 'Action Required' : 'Line Secured'}
+                          </span>
+                          <span className="text-slate-400 font-mono mt-0.5 block">
+                            Downtime: {oeeData ? Math.round(oeeData.totalDowntimeSeconds) : 0}s
+                          </span>
+                        </div>
                       </div>
-                      <div className={`p-3 rounded border transition-colors bg-slate-950 border-slate-800 ${getActiveAnomaliesCount() > 0 ? 'text-rose-500' : 'text-slate-400'}`}>
+                      <div className={`p-3 rounded border transition-colors bg-slate-950 border-slate-800 ${(oeeData?.activeAlertCount || 0) > 0 ? 'text-rose-500' : 'text-slate-400'}`}>
                         <ShieldAlert size={20} />
                       </div>
                     </div>
@@ -368,7 +487,7 @@ function Dashboard() {
                     <div className="flex items-center justify-between">
                       <div>
                         <p className="text-[10px] font-bold text-slate-500 tracking-wider uppercase font-mono">Line Health</p>
-                        <p className="text-2xl font-black text-white font-mono mt-1.5">{getLineHealth()}</p>
+                        <p className="text-2xl font-black text-white font-mono mt-1.5">{oeeData ? `${oeeData.lineHealth}%` : '100%'}</p>
                         <p className="text-[9px] text-violet-400 mt-1 flex items-center gap-1">
                           <span className="h-1.5 w-1.5 rounded-full bg-violet-400 animate-pulse" /> Stability Index
                         </p>
@@ -454,7 +573,7 @@ function Dashboard() {
                           >
                             <p className="text-[9px] text-slate-500 font-mono truncate">{st.name}</p>
                             <p className="text-sm font-black font-mono mt-1">
-                              Vehicle #{pipelineQueue[idx]}
+                              {pipelineQueue[idx] ? `Vehicle #${pipelineQueue[idx]}` : 'Idle'}
                             </p>
                           </button>
                           {idx < stations.length - 1 && (
@@ -488,6 +607,7 @@ function Dashboard() {
                       activeSim={simStates[activeStationId]}
                       alerts={alerts}
                       running={running}
+                      activeOrder={activeOrder}
                     />
                   </div>
                 </div>
@@ -512,7 +632,29 @@ function Dashboard() {
                   setVehiclesCompleted={setVehiclesCompleted}
                   lineLog={lineLog}
                   setLineLog={setLineLog}
+                  alerts={alerts}
                 />
+              </div>
+            )}
+
+            {/* 5. TRACEABILITY VIEW */}
+            {activeTab === 'traceability' && user && (
+              <div className="animate-fade-in w-full">
+                <TraceabilityPanel />
+              </div>
+            )}
+
+            {/* JIT INVENTORY VIEW */}
+            {activeTab === 'inventory' && user && (
+              <div className="animate-fade-in w-full">
+                <InventoryPanel />
+              </div>
+            )}
+
+            {/* 6. ALARM HISTORY VIEW */}
+            {activeTab === 'alarmHistory' && user && (
+              <div className="animate-fade-in w-full">
+                <AlarmHistoryPanel />
               </div>
             )}
 

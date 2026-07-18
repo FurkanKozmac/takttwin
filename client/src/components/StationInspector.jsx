@@ -10,7 +10,7 @@ const STATION_METADATA = {
   6: { operator: 'Ali Öztürk', product: 'Yaris Cross', avatar: 'AÖ' },
 }
 
-export default function StationInspector({ activeStationId, station, activeSim, alerts, running }) {
+export default function StationInspector({ activeStationId, station, activeSim, alerts, running, activeOrder }) {
   const meta = STATION_METADATA[activeStationId] || { operator: 'Unknown Operator', product: 'Standard Chassis', avatar: '??' }
   const hasAlert = alerts.some(a => a.stationId === activeStationId && !a.resolved)
 
@@ -83,7 +83,7 @@ export default function StationInspector({ activeStationId, station, activeSim, 
           <div className="grid grid-cols-2 gap-3 mt-1 border-t border-gray-900 pt-3">
             <div>
               <span className="text-[10px] font-mono text-gray-600">Product Model</span>
-              <p className="text-xs font-semibold text-gray-200 mt-0.5">{meta.product}</p>
+              <p className="text-xs font-semibold text-gray-200 mt-0.5">{activeOrder?.productModel || meta.product}</p>
             </div>
             <div>
               <span className="text-[10px] font-mono text-gray-600">Active Shift</span>

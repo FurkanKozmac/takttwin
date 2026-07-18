@@ -9,15 +9,9 @@ import lombok.NoArgsConstructor;
 @NoArgsConstructor
 @AllArgsConstructor
 @Builder
-public class WorkElement {
+public class Material {
     private Long id;
     private String name;
-    private Double standardDuration;
-    private WorkType workType;
-    private Long stationId;
-
-    private boolean isValueAdded;
-
-    private Long materialId;
-    private Integer materialConsumptionQuantity;
+    private Integer stockQuantity;
+    private Integer minThreshold;
 }

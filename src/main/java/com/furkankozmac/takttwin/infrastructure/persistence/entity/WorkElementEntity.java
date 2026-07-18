@@ -33,4 +33,10 @@ public class WorkElementEntity {
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "station_id", nullable = false)
     private StationEntity station;
+
+    @Column(name = "material_id")
+    private Long materialId;
+
+    @Column(name = "material_consumption_quantity")
+    private Integer materialConsumptionQuantity;
 }

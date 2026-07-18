@@ -1,4 +1,4 @@
-import { useState, useCallback } from 'react'
+import { useState, useCallback, useEffect } from 'react'
 import api from '../api/axios'
 import { usePolling } from '../hooks/usePolling'
 import { useAuth } from '../context/AuthContext'
@@ -99,7 +99,12 @@ export default function YamazumiChart({ activeStationId = 1 }) {
     }
   }, [activeStationId])
 
-  usePolling(fetchData, 2000, !!user)
+  useEffect(() => {
+    fetchData()
+    const handleRefresh = () => fetchData()
+    window.addEventListener('yamazumi-refresh', handleRefresh)
+    return () => window.removeEventListener('yamazumi-refresh', handleRefresh)
+  }, [fetchData])
 
   const totalStandard = data.reduce((s, d) => s + d.standard, 0)
   const totalActual   = data.reduce((s, d) => s + d.actual,   0)

@@ -42,6 +42,8 @@ public class PersistenceMapper {
                 .workType(entity.getWorkType())
                 .isValueAdded(entity.isValueAdded())
                 .stationId(entity.getStation() != null ? entity.getStation().getId() : null)
+                .materialId(entity.getMaterialId())
+                .materialConsumptionQuantity(entity.getMaterialConsumptionQuantity())
                 .build();
     }
 
@@ -54,6 +56,8 @@ public class PersistenceMapper {
                 .workType(entity.getWorkType())
                 .isValueAdded(entity.isValueAdded())
                 .stationId(stationId)
+                .materialId(entity.getMaterialId())
+                .materialConsumptionQuantity(entity.getMaterialConsumptionQuantity())
                 .build();
     }
 
@@ -66,6 +70,8 @@ public class PersistenceMapper {
                 .workType(domain.getWorkType())
                 .isValueAdded(domain.isValueAdded())
                 .station(stationEntity)
+                .materialId(domain.getMaterialId())
+                .materialConsumptionQuantity(domain.getMaterialConsumptionQuantity())
                 .build();
     }
 
@@ -78,6 +84,7 @@ public class PersistenceMapper {
                 .actualDuration(entity.getActualDuration())
                 .cycleNumber(entity.getCycleNumber())
                 .createdAt(entity.getCreatedAt())
+                .vehicleId(entity.getVehicleId())
                 .build();
     }
 
@@ -90,6 +97,7 @@ public class PersistenceMapper {
                 .actualDuration(domain.getActualDuration())
                 .cycleNumber(domain.getCycleNumber())
                 .createdAt(domain.getCreatedAt())
+                .vehicleId(domain.getVehicleId())
                 .build();
     }
 
@@ -167,4 +175,49 @@ public class PersistenceMapper {
                 .build();
     }
 
+    public static Vehicle toDomain(VehicleEntity entity) {
+        if (entity == null) return null;
+        return Vehicle.builder()
+                .id(entity.getId())
+                .serialNumber(entity.getSerialNumber())
+                .productionOrder(ProductionOrderMapper.toDomain(entity.getProductionOrder()))
+                .currentStation(toDomain(entity.getCurrentStation()))
+                .status(entity.getStatus())
+                .createdAt(entity.getCreatedAt())
+                .completedAt(entity.getCompletedAt())
+                .build();
+    }
+
+    public static VehicleEntity toEntity(Vehicle domain) {
+        if (domain == null) return null;
+        return VehicleEntity.builder()
+                .id(domain.getId())
+                .serialNumber(domain.getSerialNumber())
+                .productionOrder(ProductionOrderMapper.toEntity(domain.getProductionOrder()))
+                .currentStation(toEntity(domain.getCurrentStation()))
+                .status(domain.getStatus())
+                .createdAt(domain.getCreatedAt())
+                .completedAt(domain.getCompletedAt())
+                .build();
+    }
+
+    public static Material toDomain(MaterialEntity entity) {
+        if (entity == null) return null;
+        return Material.builder()
+                .id(entity.getId())
+                .name(entity.getName())
+                .stockQuantity(entity.getStockQuantity())
+                .minThreshold(entity.getMinThreshold())
+                .build();
+    }
+
+    public static MaterialEntity toEntity(Material domain) {
+        if (domain == null) return null;
+        return MaterialEntity.builder()
+                .id(domain.getId())
+                .name(domain.getName())
+                .stockQuantity(domain.getStockQuantity())
+                .minThreshold(domain.getMinThreshold())
+                .build();
+    }
 }

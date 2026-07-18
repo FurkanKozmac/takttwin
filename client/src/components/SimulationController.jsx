@@ -24,11 +24,12 @@ export default function SimulationController({
   simStates, setSimStates, activeOrder,
   pipelineQueue, setPipelineQueue,
   vehiclesCompleted, setVehiclesCompleted,
-  lineLog, setLineLog
+  lineLog, setLineLog, alerts
 }) {
   const { user } = useAuth()
   const [stations, setStations]       = useState([])
   const [cordBounce, setCordBounce]   = useState(false)
+  const [outOfStockError, setOutOfStockError] = useState(null)
 
   const runningRef   = useRef(false)
   const muriRef      = useRef(false)
@@ -88,6 +89,22 @@ export default function SimulationController({
    */
   const processStation = async (station, cycleNumber) => {
     const stationId = station.id
+    if (cycleNumber === null || cycleNumber === undefined) {
+      setSimStates(prev => ({
+        ...prev,
+        [stationId]: {
+          ...(prev[stationId] || {}),
+          currentEl: null,
+          currentElIdx: -1,
+          elProgress: 0,
+          cycleCount: null,
+          totalTime: 0,
+          logs: [`[${new Date().toLocaleTimeString()}] 💤 Station ${station.name} is IDLE — awaiting vehicle`, ...(prev[stationId]?.logs || [])].slice(0, 20)
+        }
+      }))
+      return { totalMs: 0, stationId }
+    }
+
     const elements = station.workElements || []
     if (elements.length === 0) return { totalMs: 0, stationId }
 
@@ -151,11 +168,21 @@ export default function SimulationController({
           cycleNumber:    cycleNumber,
         })
       } catch (err) {
+        const errorMsg = err.response?.data?.message || err.message || ''
+        const isOutOfStock = errorMsg.includes('OUT OF STOCK') || errorMsg.includes('OutOfStock')
+
+        if (isOutOfStock) {
+          setOutOfStockError(errorMsg)
+          runningRef.current = false
+          setRunning(false)
+          toast.error("🚨 Material Out of Stock! Conveyor line stopped immediately.", { duration: 6000 })
+        }
+
         setSimStates(prev => ({
           ...prev,
           [stationId]: {
             ...(prev[stationId] || {}),
-            logs: [`[${new Date().toLocaleTimeString()}]  ✗ Telemetry error: ${err.response?.data?.message || err.message}`, ...(prev[stationId]?.logs || [])].slice(0, 20)
+            logs: [`[${new Date().toLocaleTimeString()}]  ✗ Telemetry error: ${errorMsg}`, ...(prev[stationId]?.logs || [])].slice(0, 20)
           }
         }))
       }
@@ -174,16 +201,10 @@ export default function SimulationController({
     const NUM_STATIONS = sortedStations.length
     if (NUM_STATIONS === 0) return
 
-    // Initialize the pipeline: station 0 gets cycle 1, station 1 gets cycle 0 (not yet assigned), etc.
-    // Actually, we ramp up: only station 1 has work initially, then station 1+2, etc.
-    // For simplicity and matching real-world startup: fill all 6 slots at once.
-    let nextCycle = NUM_STATIONS + 1  // Next free cycle number after initial fill
-    let queue = []
-    for (let i = 0; i < NUM_STATIONS; i++) {
-      // Station 0 (Trim-1) gets the highest cycle, Station 5 (Inspection) gets the lowest
-      queue.push(NUM_STATIONS - i)
-    }
-    // queue = [6, 5, 4, 3, 2, 1] => Station 1 works on Cycle#6, Station 6 works on Cycle#1
+    // Initialize the pipeline: ramp up sequentially from Station 1
+    let nextCycle = 2
+    let queue = Array(NUM_STATIONS).fill(null)
+    queue[0] = 1
 
     setPipelineQueue([...queue])
     let completed = 0
@@ -191,35 +212,46 @@ export default function SimulationController({
     // Initialize simStates for all stations
     const initialStates = {}
     sortedStations.forEach((st, idx) => {
+      const cycle = queue[idx]
       initialStates[st.id] = {
-        cycleCount: queue[idx],
+        cycleCount: cycle,
         currentEl: null,
         currentElIdx: -1,
         elProgress: 0,
         totalTime: 0,
-        logs: [`[${new Date().toLocaleTimeString()}] ▶ Station ${st.name} initialized — Vehicle #${queue[idx]} on conveyor`]
+        logs: [
+          cycle 
+            ? `[${new Date().toLocaleTimeString()}] ▶ Station ${st.name} initialized — Vehicle #${cycle} on conveyor`
+            : `[${new Date().toLocaleTimeString()}] 💤 Station ${st.name} initialized — awaiting vehicle`
+        ]
       }
     })
     setSimStates(prev => ({ ...prev, ...initialStates }))
 
     const ts = () => new Date().toLocaleTimeString()
 
-    setLineLog([`[${ts()}] 🏭 Conveyor Belt started — ${NUM_STATIONS} vehicles loaded on line`])
+    setLineLog([`[${ts()}] 🏭 Conveyor Belt started — line initialized empty with Vehicle #1 entering Trim-1`])
 
     // Main pulse loop
     while (runningRef.current) {
       // Log current conveyor state
-      const queueStr = sortedStations.map((st, i) => `${st.name.split('-')[0]}#${queue[i]}`).join(' → ')
+      const queueStr = sortedStations.map((st, i) => `${st.name.split('-')[0]}#${queue[i] || 'Idle'}`).join(' → ')
       setLineLog(prev => [`[${ts()}] ━━ CONVEYOR PULSE ━━ ${queueStr}`, ...prev].slice(0, 30))
 
       // Update cycle numbers for each station in simStates
       sortedStations.forEach((st, idx) => {
+        const cycle = queue[idx]
         setSimStates(prev => ({
           ...prev,
           [st.id]: {
             ...(prev[st.id] || {}),
-            cycleCount: queue[idx],
-            logs: [`[${new Date().toLocaleTimeString()}] ── Vehicle #${queue[idx]} — processing begins ──`, ...(prev[st.id]?.logs || [])].slice(0, 20)
+            cycleCount: cycle,
+            logs: [
+              cycle 
+                ? `[${new Date().toLocaleTimeString()}] ── Vehicle #${cycle} — processing begins ──`
+                : `[${new Date().toLocaleTimeString()}] ── Station is IDLE — awaiting vehicle ──`,
+              ...(prev[st.id]?.logs || [])
+            ].slice(0, 20)
           }
         }))
       })
@@ -236,6 +268,11 @@ export default function SimulationController({
       // Log per-station completion times
       results.forEach((res, idx) => {
         const st = sortedStations[idx]
+        const cycle = queue[idx]
+        if (cycle === null || cycle === undefined) {
+          // If station was idle, do not log completion
+          return
+        }
         const totalSec = parseFloat((res.totalMs / 1000).toFixed(1))
         const isOverTakt = totalSec > (st.taktTime || 60)
 
@@ -248,7 +285,7 @@ export default function SimulationController({
             elProgress: 0,
             totalTime: totalSec,
             logs: [
-              `[${new Date().toLocaleTimeString()}] ✓ Vehicle #${queue[idx]} completed — ${totalSec}s ${isOverTakt ? '▲ OVER TAKT' : '✓ OK'}`,
+              `[${new Date().toLocaleTimeString()}] ✓ Vehicle #${cycle} completed — ${totalSec}s ${isOverTakt ? '▲ OVER TAKT' : '✓ OK'}`,
               ...(prev[st.id]?.logs || [])
             ].slice(0, 20)
           }
@@ -258,23 +295,30 @@ export default function SimulationController({
       // ===== CONVEYOR BELT SHIFT =====
       // The vehicle at Station 6 (last station = Inspection) exits the factory
       const exitedVehicle = queue[NUM_STATIONS - 1]
-      completed++
-      setVehiclesCompleted(completed)
+      if (exitedVehicle !== null && exitedVehicle !== undefined) {
+        completed++
+        setVehiclesCompleted(completed)
 
-      setLineLog(prev => [
-        `[${ts()}] 🚗✅ Vehicle #${exitedVehicle} completed VES Quality Inspection and left the factory!`,
-        ...prev
-      ].slice(0, 30))
+        setLineLog(prev => [
+          `[${ts()}] 🚗✅ Vehicle #${exitedVehicle} completed VES Quality Inspection and left the factory!`,
+          ...prev
+        ].slice(0, 30))
 
-      toast.success(`🚗 Vehicle #${exitedVehicle} left the factory!`, {
-        duration: 3000,
-        style: {
-          background: '#064e3b',
-          border: '1px solid #10b981',
-          color: '#ecfdf5',
-          fontSize: '12px',
-        }
-      })
+        toast.success(`🚗 Vehicle #${exitedVehicle} left the factory!`, {
+          duration: 3000,
+          style: {
+            background: '#064e3b',
+            border: '1px solid #10b981',
+            color: '#ecfdf5',
+            fontSize: '12px',
+          }
+        })
+      } else {
+        setLineLog(prev => [
+          `[${ts()}] ℹ Inspection station was empty during conveyor pulse.`,
+          ...prev
+        ].slice(0, 30))
+      }
 
       // Shift the conveyor: each station receives the vehicle from the previous station
       for (let i = NUM_STATIONS - 1; i > 0; i--) {
@@ -295,6 +339,18 @@ export default function SimulationController({
     }
   }, [])
 
+  // Auto-stop simulation when a material shortage alert is active
+  useEffect(() => {
+    const hasMaterialShortageAlert = alerts?.some(a => !a.resolved && (a.message?.includes('OUT OF STOCK') || a.message?.includes('OutOfStock')));
+    if (hasMaterialShortageAlert && running) {
+      const alert = alerts.find(a => !a.resolved && (a.message?.includes('OUT OF STOCK') || a.message?.includes('OutOfStock')));
+      setOutOfStockError(alert ? alert.message : "Material Out of Stock! Line Stopped.");
+      runningRef.current = false;
+      setRunning(false);
+      toast.error("🚨 Material Out of Stock Alert detected! Conveyor line stopped immediately.", { duration: 6000 });
+    }
+  }, [alerts, running, setRunning]);
+
   const runSimulation = async () => {
     if (stations.length === 0) {
       toast.error('No stations found. Create or seed database first.', { duration: 4000 })
@@ -305,12 +361,13 @@ export default function SimulationController({
       return
     }
 
+    setOutOfStockError(null)
     setRunning(true)
     runningRef.current = true
     setVehiclesCompleted(0)
     setLineLog([])
 
-    toast.success('🏭 Conveyor Belt Pipeline started — 6 vehicles on the line!', { icon: '⚡' })
+    toast.success('🏭 Conveyor Belt Pipeline started — line initialized empty with Vehicle #1 entering Trim-1', { icon: '⚡' })
 
     // Trigger conveyor belt simulation
     runConveyorBelt(stations)
@@ -384,6 +441,19 @@ export default function SimulationController({
         </div>
       </div>
 
+      {/* Out of Stock Warning Banner */}
+      {outOfStockError && (
+        <div className="bg-red-950/80 border border-red-500/50 rounded p-4 text-red-200 text-xs font-bold flex items-start gap-3 animate-pulse">
+          <AlertTriangle size={18} className="text-red-500 flex-shrink-0 mt-0.5" />
+          <div>
+            <p className="uppercase tracking-wider">Material Out of Stock! Line Stopped.</p>
+            <p className="text-[11px] text-red-400 mt-1 font-mono font-normal">
+              {outOfStockError}
+            </p>
+          </div>
+        </div>
+      )}
+
 
 
       {/* Station info */}
@@ -399,7 +469,9 @@ export default function SimulationController({
           </div>
           <div className="bg-gray-900 rounded-lg p-3 text-center">
             <p className="section-label mb-1">Vehicle #</p>
-            <p className="text-xl font-bold font-mono" style={{ color: '#00d4aa' }}>{activeSim.cycleCount}</p>
+            <p className="text-xl font-bold font-mono" style={{ color: '#00d4aa' }}>
+              {activeSim.cycleCount ? `#${activeSim.cycleCount}` : 'Idle'}
+            </p>
           </div>
         </div>
       ) : (

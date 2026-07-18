@@ -1,9 +1,11 @@
 package com.furkankozmac.takttwin.core.application.service;
 
+import com.furkankozmac.takttwin.core.application.event.OrderEvent;
 import com.furkankozmac.takttwin.core.application.port.ProductionOrderPort;
 import com.furkankozmac.takttwin.core.domain.exception.EntityNotFoundException;
 import com.furkankozmac.takttwin.core.domain.model.OrderStatus;
 import com.furkankozmac.takttwin.core.domain.model.ProductionOrder;
+import org.springframework.context.ApplicationEventPublisher;
 
 import java.time.LocalDateTime;
 import java.util.List;
@@ -11,9 +13,11 @@ import java.util.List;
 public class ProductionOrderService {
 
     private final ProductionOrderPort productionOrderPort;
+    private final ApplicationEventPublisher eventPublisher;
 
-    public ProductionOrderService(ProductionOrderPort productionOrderPort) {
+    public ProductionOrderService(ProductionOrderPort productionOrderPort, ApplicationEventPublisher eventPublisher) {
         this.productionOrderPort = productionOrderPort;
+        this.eventPublisher = eventPublisher;
     }
 
     public ProductionOrder createOrder(ProductionOrder order) {
@@ -23,7 +27,9 @@ public class ProductionOrderService {
         order.setStatus(OrderStatus.PENDING);
         order.setCompletedQuantity(0);
         order.setCreatedAt(LocalDateTime.now());
-        return productionOrderPort.save(order);
+        ProductionOrder savedOrder = productionOrderPort.save(order);
+        eventPublisher.publishEvent(new OrderEvent(savedOrder));
+        return savedOrder;
     }
 
     public ProductionOrder activateOrder(Long id) {
@@ -33,11 +39,14 @@ public class ProductionOrderService {
         // Deactivate any currently active orders
         productionOrderPort.findActiveOrder().ifPresent(activeOrder -> {
             activeOrder.setStatus(OrderStatus.PENDING);
-            productionOrderPort.save(activeOrder);
+            ProductionOrder savedActive = productionOrderPort.save(activeOrder);
+            eventPublisher.publishEvent(new OrderEvent(savedActive));
         });
 
         targetOrder.setStatus(OrderStatus.ACTIVE);
-        return productionOrderPort.save(targetOrder);
+        ProductionOrder savedTarget = productionOrderPort.save(targetOrder);
+        eventPublisher.publishEvent(new OrderEvent(savedTarget));
+        return savedTarget;
     }
 
     public ProductionOrder getActiveOrder() {

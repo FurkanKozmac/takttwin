@@ -16,63 +16,66 @@ export default function AndonBoard({ activeStationId = 1, onAlertsUpdate }) {
   const [sirenOn, setSirenOn]           = useState(true)
   const [lastPollAt, setLastPollAt]     = useState(null)
 
-  const audioRef = useRef(null)
   const prevAlertCount = useRef(0)
 
   const canResolve = hasRole('ROLE_TEAM_LEADER', 'ROLE_HSE_SPECIALIST', 'ROLE_ADMIN')
   const hasGlobalActiveAlerts = alerts.some(a => !a.resolved)
   const hasLocalActiveAlerts = alerts.some(a => a.stationId === activeStationId && !a.resolved)
 
-  // Toggle siren + unlock audio context on user interaction
+  // Toggle siren
   const toggleSiren = () => {
-    const nextSirenOn = !sirenOn
-    setSirenOn(nextSirenOn)
-
-    if (nextSirenOn) {
-      if (!audioRef.current) {
-        audioRef.current = new Audio('/siren.mp3')
-        audioRef.current.loop = true
-      }
-      // Play and pause immediately to unlock the media element on the browser
-      audioRef.current.play()
-        .then(() => {
-          if (!hasGlobalActiveAlerts) {
-            audioRef.current.pause()
-          }
-        })
-        .catch(error => console.log('Audio context unlock failed or suspended:', error))
-    } else {
-      if (audioRef.current) {
-        audioRef.current.pause()
-      }
-    }
+    setSirenOn(!sirenOn)
   }
 
   useEffect(() => {
+    let timer
     if (hasGlobalActiveAlerts && sirenOn) {
-      if (!audioRef.current) {
-        audioRef.current = new Audio('/siren.mp3')
-        audioRef.current.loop = true
+      const playChime = () => {
+        try {
+          const AudioContext = window.AudioContext || window.webkitAudioContext
+          if (!AudioContext) return
+          const ctx = new AudioContext()
+          const now = ctx.currentTime
+          
+          // First Tone (C5 rising to E5)
+          const osc1 = ctx.createOscillator()
+          const gain1 = ctx.createGain()
+          osc1.type = 'sine'
+          osc1.frequency.setValueAtTime(523.25, now) // C5
+          osc1.frequency.exponentialRampToValueAtTime(659.25, now + 0.15) // E5
+          gain1.gain.setValueAtTime(0, now)
+          gain1.gain.linearRampToValueAtTime(0.12, now + 0.05)
+          gain1.gain.exponentialRampToValueAtTime(0.001, now + 0.7)
+          osc1.connect(gain1)
+          gain1.connect(ctx.destination)
+          osc1.start(now)
+          osc1.stop(now + 0.7)
+
+          // Second Tone (G5)
+          const osc2 = ctx.createOscillator()
+          const gain2 = ctx.createGain()
+          osc2.type = 'sine'
+          osc2.frequency.setValueAtTime(783.99, now + 0.2) // G5
+          gain2.gain.setValueAtTime(0, now + 0.2)
+          gain2.gain.linearRampToValueAtTime(0.08, now + 0.25)
+          gain2.gain.exponentialRampToValueAtTime(0.001, now + 0.8)
+          osc2.connect(gain2)
+          gain2.connect(ctx.destination)
+          osc2.start(now + 0.2)
+          osc2.stop(now + 0.8)
+
+        } catch (e) {
+          console.log('Web Audio chime blocked or failed:', e)
+        }
       }
-      audioRef.current.play()
-        .catch(err => console.log('Autoplay blocked. Click the sound toggle to enable audio:', err))
-    } else {
-      if (audioRef.current) {
-        audioRef.current.pause()
-      }
+
+      playChime()
+      timer = setInterval(playChime, 3000)
+    }
+    return () => {
+      if (timer) clearInterval(timer)
     }
   }, [hasGlobalActiveAlerts, sirenOn])
-
-  // Cleanup on unmount
-  useEffect(() => {
-    return () => {
-      if (audioRef.current) {
-        audioRef.current.pause()
-        audioRef.current.currentTime = 0
-        audioRef.current = null
-      }
-    }
-  }, [])
 
   // New alert toast
   useEffect(() => {
@@ -103,7 +106,12 @@ export default function AndonBoard({ activeStationId = 1, onAlertsUpdate }) {
     }
   }, [user, onAlertsUpdate])
 
-  usePolling(fetchAlerts, 2000, !!user)
+  useEffect(() => {
+    fetchAlerts()
+    const handleRefresh = () => fetchAlerts()
+    window.addEventListener('andon-refresh', handleRefresh)
+    return () => window.removeEventListener('andon-refresh', handleRefresh)
+  }, [fetchAlerts])
 
   const handleResolved = useCallback(() => {
     fetchAlerts()

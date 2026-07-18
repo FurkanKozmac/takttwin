@@ -8,6 +8,7 @@ import com.furkankozmac.takttwin.infrastructure.persistence.repository.Telemetry
 import org.springframework.context.annotation.Primary;
 import org.springframework.stereotype.Component;
 
+import java.time.LocalDateTime;
 import java.util.List;
 import java.util.stream.Collectors;
 
@@ -40,5 +41,10 @@ public class FlushingTelemetryLogAdapter implements TelemetryLogPort {
     public Double getAverageDurationByElementId(Long elementId) {
         Double avg = repository.getAverageDurationByElementId(elementId);
         return avg != null ? avg : 0.0;
+    }
+
+    @Override
+    public List<Object[]> getDurationSumsByStationIdAndStartTime(Long stationId, LocalDateTime startTime) {
+        return repository.getDurationSumsByStationIdAndStartTime(stationId, startTime);
     }
 }

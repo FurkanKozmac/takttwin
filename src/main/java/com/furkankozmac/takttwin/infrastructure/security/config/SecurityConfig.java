@@ -37,6 +37,8 @@ public class SecurityConfig {
                 )
                 .authorizeHttpRequests(auth -> auth
                         .requestMatchers("/api/auth/**").permitAll()
+                        .requestMatchers("/api/sse/**").permitAll()
+                        .requestMatchers(org.springframework.http.HttpMethod.GET, "/api/materials").permitAll()
                         .anyRequest().authenticated()
                 );
 

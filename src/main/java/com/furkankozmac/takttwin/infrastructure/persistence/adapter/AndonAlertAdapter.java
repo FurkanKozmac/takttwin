@@ -7,6 +7,7 @@ import com.furkankozmac.takttwin.infrastructure.persistence.mapper.PersistenceMa
 import com.furkankozmac.takttwin.infrastructure.persistence.repository.AndonAlertJpaRepository;
 import org.springframework.stereotype.Component;
 
+import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Optional;
 import java.util.stream.Collectors;
@@ -35,7 +36,33 @@ public class AndonAlertAdapter implements AndonAlertPort {
     }
 
     @Override
+    public List<AndonAlert> findResolvedAlerts() {
+        return repository.findByResolvedTrue().stream()
+                .map(PersistenceMapper::toDomain)
+                .collect(Collectors.toList());
+    }
+
+    @Override
     public Optional<AndonAlert> findById(Long id) {
         return repository.findById(id).map(PersistenceMapper::toDomain);
+    }
+
+    @Override
+    public List<AndonAlert> findAlertsByStationIdAndCreatedAtAfter(Long stationId, LocalDateTime startTime) {
+        return repository.findByStationIdAndCreatedAtAfter(stationId, startTime).stream()
+                .map(PersistenceMapper::toDomain)
+                .collect(Collectors.toList());
+    }
+
+    @Override
+    public List<AndonAlert> findAlertsByCreatedAtAfter(LocalDateTime startTime) {
+        return repository.findByCreatedAtAfter(startTime).stream()
+                .map(PersistenceMapper::toDomain)
+                .collect(Collectors.toList());
+    }
+
+    @Override
+    public Double calculateTotalDowntimeSeconds(LocalDateTime startTime) {
+        return repository.calculateTotalDowntimeSeconds(startTime);
     }
 }

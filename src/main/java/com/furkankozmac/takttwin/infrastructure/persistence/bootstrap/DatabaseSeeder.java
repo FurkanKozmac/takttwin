@@ -22,15 +22,18 @@ public class DatabaseSeeder implements CommandLineRunner {
     private final StationJpaRepository stationRepository;
     private final WorkElementJpaRepository workElementRepository;
     private final PasswordEncoder passwordEncoder;
+    private final com.furkankozmac.takttwin.infrastructure.persistence.repository.MaterialJpaRepository materialRepository;
 
     public DatabaseSeeder(UserJpaRepository userRepository,
                           StationJpaRepository stationRepository,
                           WorkElementJpaRepository workElementRepository,
-                          PasswordEncoder passwordEncoder) {
+                          PasswordEncoder passwordEncoder,
+                          com.furkankozmac.takttwin.infrastructure.persistence.repository.MaterialJpaRepository materialRepository) {
         this.userRepository = userRepository;
         this.stationRepository = stationRepository;
         this.workElementRepository = workElementRepository;
         this.passwordEncoder = passwordEncoder;
+        this.materialRepository = materialRepository;
     }
 
     @Override
@@ -38,6 +41,7 @@ public class DatabaseSeeder implements CommandLineRunner {
     public void run(String... args) throws Exception {
         seedUsers();
         seedStationsAndWorkElements();
+        seedMaterials();
     }
 
     private void seedUsers() {
@@ -155,5 +159,53 @@ public class DatabaseSeeder implements CommandLineRunner {
                 .build();
         workElementRepository.save(element);
         station.getWorkElements().add(element);
+    }
+
+    private void seedMaterials() {
+        if (materialRepository.count() == 0) {
+            com.furkankozmac.takttwin.infrastructure.persistence.entity.MaterialEntity cockpit = com.furkankozmac.takttwin.infrastructure.persistence.entity.MaterialEntity.builder()
+                    .name("Cockpit Unit")
+                    .stockQuantity(12)
+                    .minThreshold(3)
+                    .build();
+            materialRepository.save(cockpit);
+
+            com.furkankozmac.takttwin.infrastructure.persistence.entity.MaterialEntity fuelTank = com.furkankozmac.takttwin.infrastructure.persistence.entity.MaterialEntity.builder()
+                    .name("Fuel Tank")
+                    .stockQuantity(15)
+                    .minThreshold(4)
+                    .build();
+            materialRepository.save(fuelTank);
+
+            com.furkankozmac.takttwin.infrastructure.persistence.entity.MaterialEntity wheelTire = com.furkankozmac.takttwin.infrastructure.persistence.entity.MaterialEntity.builder()
+                    .name("Wheel Tire")
+                    .stockQuantity(48)
+                    .minThreshold(12)
+                    .build();
+            materialRepository.save(wheelTire);
+
+            com.furkankozmac.takttwin.infrastructure.persistence.entity.MaterialEntity windshield = com.furkankozmac.takttwin.infrastructure.persistence.entity.MaterialEntity.builder()
+                    .name("Windshield Glass")
+                    .stockQuantity(10)
+                    .minThreshold(3)
+                    .build();
+            materialRepository.save(windshield);
+
+            linkMaterialToWorkElement("Torpido Grubu Montaji", cockpit.getId(), 1);
+            linkMaterialToWorkElement("Yakit Deposu Montaji", fuelTank.getId(), 1);
+            linkMaterialToWorkElement("Dort Lastik Montaji", wheelTire.getId(), 4);
+            linkMaterialToWorkElement("On Cam Yapistirma", windshield.getId(), 1);
+        }
+    }
+
+    private void linkMaterialToWorkElement(String name, Long materialId, int consumption) {
+        workElementRepository.findAll().stream()
+                .filter(el -> el.getName().equalsIgnoreCase(name))
+                .findFirst()
+                .ifPresent(el -> {
+                    el.setMaterialId(materialId);
+                    el.setMaterialConsumptionQuantity(consumption);
+                    workElementRepository.save(el);
+                });
     }
 }

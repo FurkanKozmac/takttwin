@@ -32,4 +32,7 @@ public class TelemetryLogEntity {
 
     @Column(nullable = false)
     private LocalDateTime createdAt;
+
+    @Column(name = "vehicle_id")
+    private Long vehicleId;
 }

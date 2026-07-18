@@ -33,6 +33,10 @@ class TelemetryServiceTest {
     private WorkElementPort workElementPort;
     @Mock
     private AndonAlertPort andonAlertPort;
+    @Mock
+    private org.springframework.context.ApplicationEventPublisher eventPublisher;
+    @Mock
+    private com.furkankozmac.takttwin.core.application.port.MaterialPort materialPort;
 
     private TelemetryService telemetryService;
 
@@ -40,7 +44,7 @@ class TelemetryServiceTest {
     void setUp() {
         // Servisimizi mock'lanmış portlarla (arayüzlerle) ayağa kaldırıyoruz.
         // Spring Boot ayağa kalkmadan saniyeler içinde çalışacak!
-        telemetryService = new TelemetryService(telemetryLogPort, stationPort, workElementPort, andonAlertPort);
+        telemetryService = new TelemetryService(telemetryLogPort, stationPort, workElementPort, andonAlertPort, eventPublisher, materialPort);
     }
 
     @Test

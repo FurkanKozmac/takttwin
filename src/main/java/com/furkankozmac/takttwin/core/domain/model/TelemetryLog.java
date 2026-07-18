@@ -18,4 +18,5 @@ public class TelemetryLog {
     private Double actualDuration;
     private Long cycleNumber;
     private LocalDateTime createdAt;
+    private Long vehicleId;
 }

@@ -1,7 +1,9 @@
 package com.furkankozmac.takttwin.infrastructure.web.controller;
 
+import com.furkankozmac.takttwin.core.application.service.OeeService;
 import com.furkankozmac.takttwin.core.application.service.ProductionOrderService;
 import com.furkankozmac.takttwin.core.domain.model.ProductionOrder;
+import com.furkankozmac.takttwin.infrastructure.web.dto.OeeResponseDto;
 import com.furkankozmac.takttwin.infrastructure.web.dto.ProductionOrderCreateRequest;
 import jakarta.validation.Valid;
 import org.springframework.http.ResponseEntity;
@@ -15,9 +17,11 @@ import java.util.List;
 public class ProductionOrderController {
 
     private final ProductionOrderService productionOrderService;
+    private final OeeService oeeService;
 
-    public ProductionOrderController(ProductionOrderService productionOrderService) {
+    public ProductionOrderController(ProductionOrderService productionOrderService, OeeService oeeService) {
         this.productionOrderService = productionOrderService;
+        this.oeeService = oeeService;
     }
 
     @PostMapping
@@ -46,6 +50,16 @@ public class ProductionOrderController {
         try {
             ProductionOrder active = productionOrderService.getActiveOrder();
             return ResponseEntity.ok(active);
+        } catch (com.furkankozmac.takttwin.core.domain.exception.EntityNotFoundException e) {
+            return ResponseEntity.notFound().build();
+        }
+    }
+
+    @GetMapping("/active/oee")
+    @PreAuthorize("hasAnyRole('ADMIN', 'TEAM_LEADER', 'OPERATOR', 'HSE_SPECIALIST')")
+    public ResponseEntity<OeeResponseDto> getActiveOrderOee() {
+        try {
+            return ResponseEntity.ok(oeeService.calculateActiveOrderOee());
         } catch (com.furkankozmac.takttwin.core.domain.exception.EntityNotFoundException e) {
             return ResponseEntity.notFound().build();
         }

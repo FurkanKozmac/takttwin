@@ -2,6 +2,7 @@ package com.furkankozmac.takttwin.infrastructure.web.controller;
 
 import com.furkankozmac.takttwin.core.application.service.AndonAlertService;
 import com.furkankozmac.takttwin.core.domain.model.AndonAlert;
+import com.furkankozmac.takttwin.infrastructure.web.dto.MttrResponseDto;
 import com.furkankozmac.takttwin.infrastructure.web.dto.ResolveAlertRequest;
 import jakarta.validation.Valid;
 import org.springframework.http.ResponseEntity;
@@ -30,13 +31,27 @@ public class AndonAlertController {
     @PutMapping("/{id}/resolve")
     @PreAuthorize("hasAnyRole('TEAM_LEADER', 'HSE_SPECIALIST')")
     public ResponseEntity<AndonAlert> resolveAlert(
-            @PathVariable("id") Long id,
-            @Valid @RequestBody ResolveAlertRequest request,
-            Authentication authentication) {
+             @PathVariable("id") Long id,
+             @Valid @RequestBody ResolveAlertRequest request,
+             Authentication authentication) {
 
         String resolvedBy = authentication.getName();
 
         AndonAlert resolved = andonAlertService.resolveAlert(id, resolvedBy, request.getComment());
         return ResponseEntity.ok(resolved);
+    }
+
+    @GetMapping("/history")
+    @PreAuthorize("hasAnyRole('TEAM_LEADER', 'HSE_SPECIALIST')")
+    public ResponseEntity<MttrResponseDto> getAndonHistory() {
+        List<AndonAlert> resolved = andonAlertService.getResolvedAlerts();
+        Double mttr = andonAlertService.calculateMttrSeconds();
+
+        MttrResponseDto response = MttrResponseDto.builder()
+                .mttrSeconds(mttr)
+                .totalResolvedAlertCount(resolved.size())
+                .resolvedAlertsList(resolved)
+                .build();
+        return ResponseEntity.ok(response);
     }
 }

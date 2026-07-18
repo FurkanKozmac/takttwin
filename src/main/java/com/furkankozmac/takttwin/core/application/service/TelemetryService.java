@@ -1,16 +1,21 @@
 package com.furkankozmac.takttwin.core.application.service;
 
+import com.furkankozmac.takttwin.core.application.event.AndonEvent;
+import com.furkankozmac.takttwin.core.application.event.TelemetryEvent;
 import com.furkankozmac.takttwin.core.application.port.AndonAlertPort;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.context.ApplicationEventPublisher;
 import com.furkankozmac.takttwin.core.application.port.StationPort;
 import com.furkankozmac.takttwin.core.application.port.TelemetryLogPort;
 import com.furkankozmac.takttwin.core.application.port.WorkElementPort;
+import com.furkankozmac.takttwin.core.application.port.MaterialPort;
 import com.furkankozmac.takttwin.core.domain.exception.EntityNotFoundException;
 import com.furkankozmac.takttwin.core.domain.model.AndonAlert;
 import com.furkankozmac.takttwin.core.domain.model.Station;
 import com.furkankozmac.takttwin.core.domain.model.TelemetryLog;
 import com.furkankozmac.takttwin.core.domain.model.WorkElement;
+import com.furkankozmac.takttwin.core.domain.model.Material;
 
 import java.time.LocalDateTime;
 import java.util.List;
@@ -23,38 +28,76 @@ public class TelemetryService {
     private final StationPort stationPort;
     private final WorkElementPort workElementPort;
     private final AndonAlertPort andonAlertPort;
+    protected final ApplicationEventPublisher eventPublisher;
+    private final MaterialPort materialPort;
 
     public TelemetryService(TelemetryLogPort telemetryLogPort,
                             StationPort stationPort,
                             WorkElementPort workElementPort,
-                            AndonAlertPort andonAlertPort) {
+                            AndonAlertPort andonAlertPort,
+                            ApplicationEventPublisher eventPublisher,
+                            MaterialPort materialPort) {
         this.telemetryLogPort = telemetryLogPort;
         this.stationPort = stationPort;
         this.workElementPort = workElementPort;
         this.andonAlertPort = andonAlertPort;
+        this.eventPublisher = eventPublisher;
+        this.materialPort = materialPort;
     }
 
-    public TelemetryLog submitTelemetry(TelemetryLog log) {
-        Station station = stationPort.findById(log.getStationId()).orElseThrow(() -> new EntityNotFoundException("Station with id " + log.getStationId() + " not found"));
+    public TelemetryLog submitTelemetry(TelemetryLog logObj) {
+        Station station = stationPort.findById(logObj.getStationId()).orElseThrow(() -> new EntityNotFoundException("Station with id " + logObj.getStationId() + " not found"));
 
-        List<WorkElement> definedElements = workElementPort.findByStationId(log.getStationId());
-        boolean elementExists = definedElements.stream().anyMatch(e -> e.getId().equals(log.getWorkElementId()));
+        List<WorkElement> definedElements = workElementPort.findByStationId(logObj.getStationId());
+        WorkElement workElement = definedElements.stream()
+                .filter(e -> e.getId().equals(logObj.getWorkElementId()))
+                .findFirst()
+                .orElseThrow(() -> new EntityNotFoundException("WorkElement with id " + logObj.getWorkElementId() + " not found"));
 
-        if (!elementExists) {
-            throw new EntityNotFoundException("WorkElement with id " + log.getWorkElementId() + " not found");
+        // JIT Material Stock tracking logic
+        if (workElement.getMaterialId() != null) {
+            Material material = materialPort.findById(workElement.getMaterialId())
+                    .orElseThrow(() -> new EntityNotFoundException("Material with id " + workElement.getMaterialId() + " not found"));
+
+            int consumption = workElement.getMaterialConsumptionQuantity() != null ? workElement.getMaterialConsumptionQuantity() : 0;
+            int newStock = material.getStockQuantity() - consumption;
+
+            if (newStock <= 0) {
+                // Save alert first
+                String alertMessage = String.format("ANDON ALERT! Material '%s' is OUT OF STOCK at %s. Conveyor line stopped immediately!",
+                        material.getName(), station.getName());
+
+                log.error(alertMessage);
+
+                AndonAlert alert = AndonAlert.create(logObj.getStationId(), logObj.getCycleNumber(), 0.0, station.getTaktTime(), alertMessage);
+                AndonAlert savedAlert = andonAlertPort.save(alert);
+                eventPublisher.publishEvent(new AndonEvent(savedAlert));
+
+                // Deduct stock down to 0 and save so DB is updated
+                material.setStockQuantity(Math.max(0, newStock));
+                Material savedMaterial = materialPort.save(material);
+                eventPublisher.publishEvent(new com.furkankozmac.takttwin.core.application.event.MaterialEvent(savedMaterial));
+
+                throw new com.furkankozmac.takttwin.core.domain.exception.MaterialOutOfStockException(alertMessage);
+            }
+
+            material.setStockQuantity(newStock);
+            Material savedMaterial = materialPort.save(material);
+            eventPublisher.publishEvent(new com.furkankozmac.takttwin.core.application.event.MaterialEvent(savedMaterial));
         }
 
-        log.setCreatedAt(LocalDateTime.now());
-        TelemetryLog savedLog = telemetryLogPort.save(log);
+        logObj.setCreatedAt(LocalDateTime.now());
+        TelemetryLog savedLog = telemetryLogPort.save(logObj);
+        eventPublisher.publishEvent(new TelemetryEvent(savedLog));
 
-        List<TelemetryLog> cycleLogs = telemetryLogPort.findByCycleNumber(log.getCycleNumber());
+        List<TelemetryLog> cycleLogs = telemetryLogPort.findByCycleNumber(logObj.getCycleNumber());
 
         long stationCycleCount = cycleLogs.stream()
-                .filter(l -> l.getStationId().equals(log.getStationId()))
+                .filter(l -> l.getStationId().equals(logObj.getStationId()))
                 .count();
 
         if (stationCycleCount == definedElements.size()) {
-            analyzeCycleAndTriggerAndon(log.getStationId(), log.getCycleNumber(), station, cycleLogs);
+            analyzeCycleAndTriggerAndon(logObj.getStationId(), logObj.getCycleNumber(), station, cycleLogs);
         }
 
         return savedLog;
@@ -80,7 +123,8 @@ public class TelemetryService {
             log.warn(alertMessage);
 
             AndonAlert alert = AndonAlert.create(stationId, cycleNumber, totalActualDuration, taktTime, alertMessage);
-            andonAlertPort.save(alert);
+            AndonAlert savedAlert = andonAlertPort.save(alert);
+            eventPublisher.publishEvent(new AndonEvent(savedAlert));
         }
     }
 }

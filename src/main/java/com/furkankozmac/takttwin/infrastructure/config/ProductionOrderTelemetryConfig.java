@@ -3,6 +3,7 @@ package com.furkankozmac.takttwin.infrastructure.config;
 import com.furkankozmac.takttwin.core.application.port.*;
 import com.furkankozmac.takttwin.core.application.service.ProductionOrderTelemetryService;
 import com.furkankozmac.takttwin.core.application.service.TelemetryService;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.context.annotation.Primary;
@@ -16,9 +17,12 @@ public class ProductionOrderTelemetryConfig {
                                              StationPort stationPort,
                                              WorkElementPort workElementPort,
                                              AndonAlertPort andonAlertPort,
-                                             ProductionOrderPort productionOrderPort) {
+                                             ProductionOrderPort productionOrderPort,
+                                             VehiclePort vehiclePort,
+                                             ApplicationEventPublisher eventPublisher,
+                                             MaterialPort materialPort) {
         return new ProductionOrderTelemetryService(
-                telemetryLogPort, stationPort, workElementPort, andonAlertPort, productionOrderPort
+                telemetryLogPort, stationPort, workElementPort, andonAlertPort, productionOrderPort, vehiclePort, eventPublisher, materialPort
         );
     }
 }
